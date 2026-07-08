@@ -14,6 +14,7 @@ must always run and pass tests **offline without an API key**.
 - Test (must stay green offline): `uv run pytest`
 - Lint: `uv run ruff check .`
 - App object: `doc_helper_ai_agent.main:app` (package lives in `src/`).
+- Container: `docker compose up --build` (multi-stage uv image, runs mock mode offline).
 
 ## Architecture (layered — respect the boundaries)
 

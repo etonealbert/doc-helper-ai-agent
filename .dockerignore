@@ -1,0 +1,47 @@
+# Version control / metadata
+.git
+.gitignore
+.github
+
+# Virtual environments (rebuilt inside the image)
+.venv
+venv
+
+# Python caches / build artifacts
+__pycache__
+*.py[cod]
+*.egg-info
+build
+dist
+wheels
+
+# Test & tooling caches
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.cache
+htmlcov
+.coverage
+coverage.xml
+
+# Secrets & local env (never bake into an image)
+.env
+.env.*
+!.env.example
+
+# Local data stores
+.chroma
+chroma
+*.sqlite3
+*.db
+
+# Editor / OS
+.idea
+.vscode
+.DS_Store
+
+# Docs & container files not needed at build time
+# (README.md is intentionally NOT ignored — pyproject references it)
+Dockerfile
+.dockerignore
+docker-compose.yml

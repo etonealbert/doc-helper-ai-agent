@@ -33,6 +33,9 @@ doc-helper-ai-agent/
 ├── .gitignore                     # excludes .env, caches, .chroma, db files
 ├── README.md                      # portfolio README (features, setup, roadmap)
 ├── main.py                        # convenience launcher -> doc_helper_ai_agent.main:run
+├── Dockerfile                     # multi-stage uv build, non-root runtime, healthcheck
+├── .dockerignore                  # keeps build context lean (README.md kept for hatchling)
+├── docker-compose.yml             # local orchestration (api service, healthcheck)
 │
 ├── .github/                       # agent & maintainer customization (see .github/README.md)
 │   ├── copilot-instructions.md    # always-on project guidelines

@@ -1,0 +1,39 @@
+# Doc Helper AI Agent — local container orchestration.
+#
+#   docker compose up --build        # build and run the API
+#   docker compose up -d             # run detached
+#   docker compose logs -f api       # follow logs
+#   docker compose down              # stop and remove
+#
+# The service runs offline in deterministic mock mode by default. To enable the
+# real OpenAI paths, create a .env file (see .env.example) and uncomment env_file.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: doc-helper-ai-agent:latest
+    container_name: doc-helper-ai-agent
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: production
+      LOG_LEVEL: INFO
+      # Mock mode = offline & deterministic. Set to "false" (and provide an
+      # OPENAI_API_KEY via env_file below) to use real LLM/embeddings.
+      ENABLE_MOCK_LLM: "true"
+    # Load secrets/overrides from a local .env if present (optional).
+    # env_file:
+    #   - .env
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

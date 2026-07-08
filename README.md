@@ -112,6 +112,27 @@ the defaults run fully offline):
 cp .env.example .env
 ```
 
+## Run with Docker
+
+The image builds with `uv` in a multi-stage build, runs as a non-root user, and
+includes a health check. It runs fully offline in mock mode by default.
+
+```bash
+# Using docker compose (recommended)
+docker compose up --build          # build + run at http://localhost:8000
+docker compose up -d               # detached
+docker compose logs -f api         # follow logs
+docker compose down                # stop + remove
+
+# Or with plain docker
+docker build -t doc-helper-ai-agent .
+docker run --rm -p 8000:8000 doc-helper-ai-agent
+```
+
+To enable the real OpenAI paths, create a `.env` (see `.env.example`), set
+`ENABLE_MOCK_LLM=false` and `OPENAI_API_KEY=...`, then uncomment `env_file` in
+[docker-compose.yml](docker-compose.yml).
+
 ## API examples
 
 ### Health
