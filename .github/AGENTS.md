@@ -9,7 +9,10 @@ conventions so changes stay consistent, deterministic, and safe.
 ```
 .github/
 ├── copilot-instructions.md     # Always-on project guidelines (build, architecture, safety)
+├── AGENTS.md                   # This file — guide to the customization folder
+├── CODEBASE_MAP.md             # FULL codebase reference: tree + every module + data flows
 ├── instructions/               # Focused, auto-attached rules (by file pattern or on-demand)
+│   ├── codebase-map.instructions.md    # on-demand: points to CODEBASE_MAP.md
 │   ├── python.instructions.md          # applyTo: **/*.py
 │   ├── agent-workflow.instructions.md  # applyTo: src/.../agent/**
 │   ├── tools.instructions.md           # applyTo: src/.../tools/**
@@ -26,8 +29,20 @@ conventions so changes stay consistent, deterministic, and safe.
     └── README.md
 ```
 
+## Understand the whole project first
+
+**[CODEBASE_MAP.md](CODEBASE_MAP.md)** is the single source of truth for how the
+codebase is organised: the annotated directory tree, what every file does and the
+symbols it exports, the request lifecycle (with diagrams), layering rules, and
+change recipes ("where do I edit for X?"). Read it before navigating or extending
+the project, and update it whenever you add/rename/remove modules or public
+functions.
+
 ## How it works
 
+- **`CODEBASE_MAP.md`** is the deep reference for the whole codebase; the
+  `codebase-map.instructions.md` file surfaces it on-demand when a task involves
+  understanding structure or locating functionality.
 - **`copilot-instructions.md`** is loaded automatically for every request in this
   workspace — it carries the essentials (commands, layered architecture, mock-mode
   determinism, and the non-negotiable safety rules).

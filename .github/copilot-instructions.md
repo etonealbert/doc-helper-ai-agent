@@ -3,6 +3,10 @@
 Local-first, mock-mode-by-default AI agent backend (FastAPI + LangGraph). The app
 must always run and pass tests **offline without an API key**.
 
+> **Start here:** For a full map of the codebase — directory tree, every module's
+> purpose and key symbols, the request lifecycle, and "where to edit for X" —
+> read [CODEBASE_MAP.md](CODEBASE_MAP.md). Keep it updated when structure changes.
+
 ## Build, run, and test
 
 - Install deps: `uv sync`
