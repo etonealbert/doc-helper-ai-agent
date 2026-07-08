@@ -36,9 +36,7 @@ def main(argv: list[str]) -> int:
         ("pytest", ["uv", "run", "pytest"]),
     ]
     if "--smoke" in argv:
-        checks.append(
-            ("smoke", ["uv", "run", "python", ".github/tools/smoke_test.py"])
-        )
+        checks.append(("smoke", ["uv", "run", "python", ".github/tools/smoke_test.py"]))
 
     results = [run(label, cmd) for label, cmd in checks]
     print("\n" + ("ALL CHECKS PASSED" if all(results) else "SOME CHECKS FAILED"))

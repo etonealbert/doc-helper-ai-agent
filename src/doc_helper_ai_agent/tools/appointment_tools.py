@@ -18,7 +18,10 @@ _SPECIALTY_KEYWORDS: list[tuple[Specialty, tuple[str, ...]]] = [
     (Specialty.ORTHODONTICS, ("braces", "orthodontic", "orthodontics", "aligner", "invisalign")),
     (Specialty.IMPLANTS, ("implant", "implants")),
     (Specialty.EMERGENCY, ("emergency", "urgent")),
-    (Specialty.GENERAL_DENTISTRY, ("cleaning", "checkup", "check-up", "filling", "cavity", "general")),
+    (
+        Specialty.GENERAL_DENTISTRY,
+        ("cleaning", "checkup", "check-up", "filling", "cavity", "general"),
+    ),
 ]
 
 

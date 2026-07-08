@@ -7,7 +7,7 @@ and stores records in memory. No real patient data is ever persisted.
 from __future__ import annotations
 
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from doc_helper_ai_agent.core.logging import get_logger
@@ -32,7 +32,7 @@ class MockCRM:
         self._records: dict[str, dict[str, Any]] = {}
 
     def _next_id(self, ticket_type: TicketType) -> str:
-        year = datetime.now(timezone.utc).year
+        year = datetime.now(UTC).year
         self._counters[ticket_type] += 1
         seq = self._counters[ticket_type]
         return f"{_PREFIX[ticket_type]}-{year}-{seq:04d}"
@@ -43,7 +43,7 @@ class MockCRM:
             record = {
                 "id": record_id,
                 "type": ticket_type.value,
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(UTC).isoformat(),
                 **payload,
             }
             self._records[record_id] = record

@@ -41,9 +41,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     llm_provider: str = Field(default="mock", alias="LLM_PROVIDER")
     llm_model: str = Field(default="gpt-4o-mini", alias="LLM_MODEL")
-    embedding_model: str = Field(
-        default="text-embedding-3-small", alias="EMBEDDING_MODEL"
-    )
+    embedding_model: str = Field(default="text-embedding-3-small", alias="EMBEDDING_MODEL")
     enable_mock_llm: bool = Field(default=True, alias="ENABLE_MOCK_LLM")
 
     # --- Vector store / RAG ---

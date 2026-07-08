@@ -32,9 +32,7 @@ def test_complaint_id_format():
 
 
 def test_escalation_id_format():
-    record = _service().create_escalation(
-        user_id="u1", reason="pain", categories=["severe_pain"]
-    )
+    record = _service().create_escalation(user_id="u1", reason="pain", categories=["severe_pain"])
     assert re.fullmatch(r"ESC-\d{4}-0001", record["id"])
     assert record["priority"] == "high"
 

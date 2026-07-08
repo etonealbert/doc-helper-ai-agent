@@ -6,9 +6,7 @@ from doc_helper_ai_agent.agent.graph import run_agent
 
 
 def _run(message: str) -> dict:
-    return run_agent(
-        message=message, user_id="u", session_id="s", trace_id="trace-test"
-    )
+    return run_agent(message=message, user_id="u", session_id="s", trace_id="trace-test")
 
 
 def _tools(state: dict) -> list[str]:

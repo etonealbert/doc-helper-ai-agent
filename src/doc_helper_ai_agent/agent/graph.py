@@ -78,9 +78,7 @@ def get_agent():
     return _compiled
 
 
-def run_agent(
-    *, message: str, user_id: str, session_id: str, trace_id: str
-) -> dict[str, Any]:
+def run_agent(*, message: str, user_id: str, session_id: str, trace_id: str) -> dict[str, Any]:
     """Execute the agent workflow and return the final state."""
     initial: AgentState = {
         "message": message,

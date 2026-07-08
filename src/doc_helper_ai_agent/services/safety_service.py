@@ -18,29 +18,63 @@ logger = get_logger(__name__)
 # Whole-word keyword sets per risk category.
 _RISK_KEYWORDS: dict[str, set[str]] = {
     "severe_pain": {
-        "severe pain", "unbearable", "excruciating", "agony", "throbbing pain",
-        "extreme pain", "really bad pain", "so much pain", "pain",
+        "severe pain",
+        "unbearable",
+        "excruciating",
+        "agony",
+        "throbbing pain",
+        "extreme pain",
+        "really bad pain",
+        "so much pain",
+        "pain",
     },
     "bleeding": {"bleeding", "blood", "hemorrhage", "won't stop bleeding"},
     "swelling": {"swelling", "swollen", "abscess", "puffy face"},
     "fever": {"fever", "high temperature", "chills"},
     "trauma": {
-        "knocked out", "broken tooth", "cracked tooth", "accident", "fell",
-        "trauma", "injury", "hit my", "car crash",
+        "knocked out",
+        "broken tooth",
+        "cracked tooth",
+        "accident",
+        "fell",
+        "trauma",
+        "injury",
+        "hit my",
+        "car crash",
     },
     "diagnosis_request": {
-        "diagnose", "diagnosis", "what do i have", "is it infected",
-        "do i have an infection", "what's wrong with", "is this serious",
+        "diagnose",
+        "diagnosis",
+        "what do i have",
+        "is it infected",
+        "do i have an infection",
+        "what's wrong with",
+        "is this serious",
         "what condition",
     },
     "medication_request": {
-        "prescribe", "prescription", "antibiotic", "antibiotics", "painkiller",
-        "painkillers", "medication", "what medicine", "which medicine",
-        "how much ibuprofen", "dosage",
+        "prescribe",
+        "prescription",
+        "antibiotic",
+        "antibiotics",
+        "painkiller",
+        "painkillers",
+        "medication",
+        "what medicine",
+        "which medicine",
+        "how much ibuprofen",
+        "dosage",
     },
     "emergency": {
-        "emergency", "urgent", "can't breathe", "cannot breathe", "911",
-        "call an ambulance", "life threatening", "passing out", "faint",
+        "emergency",
+        "urgent",
+        "can't breathe",
+        "cannot breathe",
+        "911",
+        "call an ambulance",
+        "life threatening",
+        "passing out",
+        "faint",
     },
 }
 
@@ -76,9 +110,7 @@ def assess_message(message: str) -> SafetyAssessment:
 
     logger.info("Safety triggered: categories=%s", matched)
     reason = (
-        "Message mentions potentially urgent clinical concerns: "
-        + ", ".join(sorted(matched))
-        + "."
+        "Message mentions potentially urgent clinical concerns: " + ", ".join(sorted(matched)) + "."
     )
     return SafetyAssessment(
         triggered=True,

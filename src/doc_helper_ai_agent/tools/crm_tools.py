@@ -49,9 +49,7 @@ def create_callback_request(
 ) -> ActionResult:
     """Create a callback request for the user."""
     container = get_container()
-    record = container.intake.create_callback(
-        user_id=user_id, reason=reason, priority=priority
-    )
+    record = container.intake.create_callback(user_id=user_id, reason=reason, priority=priority)
     return ActionResult(
         tool="create_callback_request",
         status=ToolStatus.SUCCESS,

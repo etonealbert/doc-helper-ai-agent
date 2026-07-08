@@ -46,9 +46,7 @@ class IntakeService:
         reason: str,
         priority: str = "normal",
     ) -> dict[str, Any]:
-        return self._crm.create_callback_request(
-            user_id=user_id, reason=reason, priority=priority
-        )
+        return self._crm.create_callback_request(user_id=user_id, reason=reason, priority=priority)
 
     def create_complaint(self, *, user_id: str, summary: str) -> dict[str, Any]:
         return self._crm.create_complaint_ticket(user_id=user_id, summary=summary)
