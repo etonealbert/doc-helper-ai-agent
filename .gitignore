@@ -8,3 +8,29 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Test & tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Local data stores
+.chroma/
+chroma/
+*.sqlite3
+*.db
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
