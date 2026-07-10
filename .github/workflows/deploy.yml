@@ -95,50 +95,74 @@ jobs:
 
       - name: Run deployment health check with Retries
         run: |
-          # 1. Grab the list of running tasks for the service
-          TASK_ARNS=$(aws ecs list-tasks \
-            --cluster "${{ env.ECS_CLUSTER }}" \
-            --service-name "${{ env.ECS_SERVICE }}" \
-            --desired-status RUNNING \
-            --query 'taskArns' \
-            --output text)
-
-          # 2. Safely isolate the most recently started task ARN
-          TASK_ARN=$(aws ecs describe-tasks \
-            --cluster "${{ env.ECS_CLUSTER }}" \
-            --tasks $TASK_ARNS \
-            --query 'reverse(sort_by(tasks, &startedAt))[0].taskArn' \
-            --output text)
-
-          # 3. Get the Elastic Network Interface (ENI) ID
-          ENI_ID=$(aws ecs describe-tasks \
-            --cluster "${{ env.ECS_CLUSTER }}" \
-            --tasks "$TASK_ARN" \
-            --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value | [0]' \
-            --output text)
-
-          # 4. Query EC2 for the new Public IP
-          PUBLIC_IP=$(aws ec2 describe-network-interfaces \
-            --network-interface-ids "$ENI_ID" \
-            --query 'NetworkInterfaces[0].Association.PublicIp' \
-            --output text)
-
-          echo "Service URL: http://$PUBLIC_IP:8000"
-          echo "PUBLIC_IP=$PUBLIC_IP" >> "$GITHUB_ENV"
-
-          # 5. Robust retry loop for testing availability
+          echo "Starting health check verification loop..."
+          
           for attempt in {1..20}; do
-            if curl \
-              --fail \
-              --silent \
-              --show-error \
-              "http://$PUBLIC_IP:8000/health"; then
+            echo "Attempt $attempt/20: Finding active task for service..."
+            
+            # 1. Grab all tasks for the service (removing the strict status filter)
+            TASK_ARNS=$(aws ecs list-tasks \
+              --cluster "${{ env.ECS_CLUSTER }}" \
+              --service-name "${{ env.ECS_SERVICE }}" \
+              --query 'taskArns' \
+              --output text)
+            
+            # If AWS returns nothing yet, wait and retry instead of crashing
+            if [ -z "$TASK_ARNS" ] || [ "$TASK_ARNS" == "None" ]; then
+              echo "No tasks found yet. Waiting 5 seconds..."
+              sleep 5
+              continue
+            fi
+            
+            # 2. Safely isolate the most recently created task ARN
+            TASK_ARN=$(aws ecs describe-tasks \
+              --cluster "${{ env.ECS_CLUSTER }}" \
+              --tasks $TASK_ARNS \
+              --query 'reverse(sort_by(tasks, &createdAt))[0].taskArn' \
+              --output text)
+              
+            if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" == "None" ]; then
+              echo "Task details not available yet. Waiting 5 seconds..."
+              sleep 5
+              continue
+            fi
+            
+            # 3. Get the Elastic Network Interface (ENI) ID
+            ENI_ID=$(aws ecs describe-tasks \
+              --cluster "${{ env.ECS_CLUSTER }}" \
+              --tasks "$TASK_ARN" \
+              --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value | [0]' \
+              --output text)
+              
+            if [ -z "$ENI_ID" ] || [ "$ENI_ID" == "None" ]; then
+              echo "ENI not attached yet. Waiting 5 seconds..."
+              sleep 5
+              continue
+            fi
+            
+            # 4. Query EC2 for the new Public IP
+            PUBLIC_IP=$(aws ec2 describe-network-interfaces \
+              --network-interface-ids "$ENI_ID" \
+              --query 'NetworkInterfaces[0].Association.PublicIp' \
+              --output text)
+              
+            if [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" == "None" ]; then
+              echo "Public IP not assigned yet. Waiting 5 seconds..."
+              sleep 5
+              continue
+            fi
+
+            echo "Service URL resolved to: http://$PUBLIC_IP:8000"
+            
+            # 5. Test the actual health endpoint
+            if curl --fail --silent --show-error "http://$PUBLIC_IP:8000/health"; then
               echo ""
               echo "Deployment health check passed successfully!"
+              echo "PUBLIC_IP=$PUBLIC_IP" >> "$GITHUB_ENV"
               exit 0
             fi
 
-            echo "Waiting for API to respond: attempt $attempt/20"
+            echo "API not responding yet. Waiting 5 seconds..."
             sleep 5
           done
 
