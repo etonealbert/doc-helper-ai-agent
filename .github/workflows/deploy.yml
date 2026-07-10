@@ -6,14 +6,13 @@ on:
       - main
 
 permissions:
-  id-token: write   # CRITICAL: This is required for AWS OIDC authentication
+  id-token: write  
   contents: read
 
 env:
   AWS_REGION: "us-east-1"
   ECR_REPOSITORY: "doc-helper-ai-agent"
   ECS_CLUSTER: "doc-helper-cluster"
-  # Note: Update this to match your exact service name from the AWS Console!
   ECS_SERVICE: "doc-helper-ai-task-service-ao2opdat"
 
 jobs:
@@ -63,47 +62,85 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag, and push image to Amazon ECR
+      - name: Build and push immutable image
+        id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Build and tag with both the Git SHA and 'latest'
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-          
-          # Push both tags
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
-      - name: Force New ECS Deployment
-        run: |
-          echo "Triggering ECS service update to pull the latest image..."
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service ${{ env.ECS_SERVICE }} \
-            --force-new-deployment > /dev/null
+          # Build and push strictly using the unique Git SHA tag
+          docker build -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
 
-      - name: Wait for ECS Service Stability
-        run: |
-          echo "Waiting for the new container to start and stabilize (this takes a few minutes)..."
-          aws ecs wait services-stable \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_SERVICE }}
+          # Pass this URI downstream to the next GitHub Action steps
+          echo "image=$IMAGE_URI" >> "$GITHUB_OUTPUT"
 
-      - name: Fetch Dynamic Public IP and Run Health Check
+      - name: Render ECS task definition
+        id: task-definition
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: .aws/ecs-task-definition.json
+          container-name: doc-helper-container   # Make sure this matches the "name" in your JSON
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-definition.outputs.task-definition }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          service: ${{ env.ECS_SERVICE }}
+          wait-for-service-stability: true
+
+      - name: Run deployment health check with Retries
         run: |
-          echo "Finding the new Public IP..."
-          
-          # 1. Get the ARN of the running task
-          TASK_ARN=$(aws ecs list-tasks --cluster ${{ env.ECS_CLUSTER }} --service-name ${{ env.ECS_SERVICE }} --query 'taskArns[0]' --output text)
-          
-          # 2. Get the Elastic Network Interface (ENI) ID attached to the task
-          ENI_ID=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} --tasks $TASK_ARN --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text)
-          
-          # 3. Query EC2 for the Public IP associated with that ENI
-          PUBLIC_IP=$(aws ec2 describe-network-interfaces --network-interface-ids $ENI_ID --query 'NetworkInterfaces[0].Association.PublicIp' --output text)
-          
-          echo "Service is live at: http://$PUBLIC_IP:8000"
-          
-          # 4. Test the /health endpoint
-          curl --fail --silent --show-error http://$PUBLIC_IP:8000/health
+          # 1. Grab the list of running tasks for the service
+          TASK_ARNS=$(aws ecs list-tasks \
+            --cluster "${{ env.ECS_CLUSTER }}" \
+            --service-name "${{ env.ECS_SERVICE }}" \
+            --desired-status RUNNING \
+            --query 'taskArns' \
+            --output text)
+
+          # 2. Safely isolate the most recently started task ARN
+          TASK_ARN=$(aws ecs describe-tasks \
+            --cluster "${{ env.ECS_CLUSTER }}" \
+            --tasks $TASK_ARNS \
+            --query 'reverse(sort_by(tasks, &startedAt))[0].taskArn' \
+            --output text)
+
+          # 3. Get the Elastic Network Interface (ENI) ID
+          ENI_ID=$(aws ecs describe-tasks \
+            --cluster "${{ env.ECS_CLUSTER }}" \
+            --tasks "$TASK_ARN" \
+            --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value | [0]' \
+            --output text)
+
+          # 4. Query EC2 for the new Public IP
+          PUBLIC_IP=$(aws ec2 describe-network-interfaces \
+            --network-interface-ids "$ENI_ID" \
+            --query 'NetworkInterfaces[0].Association.PublicIp' \
+            --output text)
+
+          echo "Service URL: http://$PUBLIC_IP:8000"
+          echo "PUBLIC_IP=$PUBLIC_IP" >> "$GITHUB_ENV"
+
+          # 5. Robust retry loop for testing availability
+          for attempt in {1..20}; do
+            if curl \
+              --fail \
+              --silent \
+              --show-error \
+              "http://$PUBLIC_IP:8000/health"; then
+              echo ""
+              echo "Deployment health check passed successfully!"
+              exit 0
+            fi
+
+            echo "Waiting for API to respond: attempt $attempt/20"
+            sleep 5
+          done
+
+          echo "Deployment health check timed out and failed."
+          exit 1
