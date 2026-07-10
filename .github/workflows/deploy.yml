@@ -1,0 +1,109 @@
+name: CD Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write   # CRITICAL: This is required for AWS OIDC authentication
+  contents: read
+
+env:
+  AWS_REGION: "us-east-1"
+  ECR_REPOSITORY: "doc-helper-ai-agent"
+  ECS_CLUSTER: "doc-helper-cluster"
+  # Note: Update this to match your exact service name from the AWS Console!
+  ECS_SERVICE: "doc-helper-ai-task-service-ao2opdat"
+
+jobs:
+  ci-quality:
+    name: Lint, Test, and Quality Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.28"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked --dev
+
+      - name: Check formatting and Lint
+        run: |
+          uv run ruff format --check .
+          uv run ruff check .
+
+      - name: Run tests
+        env:
+          ENABLE_MOCK_LLM: "true"
+          LLM_PROVIDER: "mock"
+        run: uv run pytest
+
+  deploy:
+    name: Build and Deploy to ECS
+    needs: ci-quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::964866958896:role/GitHubActionsDeployRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Build and tag with both the Git SHA and 'latest'
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          
+          # Push both tags
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Force New ECS Deployment
+        run: |
+          echo "Triggering ECS service update to pull the latest image..."
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --force-new-deployment > /dev/null
+
+      - name: Wait for ECS Service Stability
+        run: |
+          echo "Waiting for the new container to start and stabilize (this takes a few minutes)..."
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }}
+
+      - name: Fetch Dynamic Public IP and Run Health Check
+        run: |
+          echo "Finding the new Public IP..."
+          
+          # 1. Get the ARN of the running task
+          TASK_ARN=$(aws ecs list-tasks --cluster ${{ env.ECS_CLUSTER }} --service-name ${{ env.ECS_SERVICE }} --query 'taskArns[0]' --output text)
+          
+          # 2. Get the Elastic Network Interface (ENI) ID attached to the task
+          ENI_ID=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} --tasks $TASK_ARN --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text)
+          
+          # 3. Query EC2 for the Public IP associated with that ENI
+          PUBLIC_IP=$(aws ec2 describe-network-interfaces --network-interface-ids $ENI_ID --query 'NetworkInterfaces[0].Association.PublicIp' --output text)
+          
+          echo "Service is live at: http://$PUBLIC_IP:8000"
+          
+          # 4. Test the /health endpoint
+          curl --fail --silent --show-error http://$PUBLIC_IP:8000/health
