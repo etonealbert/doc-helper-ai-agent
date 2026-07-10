@@ -171,8 +171,7 @@ jobs:
       - name: Update Route 53 DNS
         env:
           HOSTED_ZONE_ID: ${{ secrets.HOSTED_ZONE_ID }}
-          # CHANGE THIS LINE TO YOUR ACTUAL DOMAIN NAME:
-          DNS_NAME: api.yourdomain.com 
+          DNS_NAME: api.albertlukmanovlabs.lol 
         run: |
           cat > route53-change.json <<EOF
           {
