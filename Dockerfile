@@ -35,7 +35,7 @@ FROM python:3.12-slim-bookworm AS runtime
 
 LABEL org.opencontainers.image.title="doc-helper-ai-agent" \
       org.opencontainers.image.description="Local-first AI agent backend (FastAPI + LangGraph)." \
-      org.opencontainers.image.source="https://github.com/your-org/doc-helper-ai-agent" \
+      org.opencontainers.image.source="https://github.com/etonealbert/doc-helper-ai-agent" \
       org.opencontainers.image.licenses="MIT"
 
 # Run as an unprivileged user.
