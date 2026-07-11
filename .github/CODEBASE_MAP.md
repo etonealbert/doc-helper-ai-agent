@@ -36,13 +36,18 @@ doc-helper-ai-agent/
 ├── Dockerfile                     # multi-stage uv build, non-root runtime, healthcheck
 ├── .dockerignore                  # keeps build context lean (README.md kept for hatchling)
 ├── docker-compose.yml             # local orchestration (api service, healthcheck)
+├── infra/terraform/                # AWS existing-resource adoption (no app deploys)
+│   ├── bootstrap/                  # private/versioned/encrypted S3 state bucket
+│   ├── environments/dev/           # dev resources, imports, discovery/execution guide
+│   └── scripts/validate.ps1        # local backend-free fmt/init/validate checks
 │
 ├── .github/                       # agent & maintainer customization (see .github/README.md)
 │   ├── copilot-instructions.md    # always-on project guidelines
 │   ├── CODEBASE_MAP.md            # THIS FILE — full codebase reference
 │   ├── instructions/              # auto-attached rules (by applyTo glob or on-demand)
 │   ├── prompts/                   # reusable /slash-command task templates
-│   └── tools/                     # offline maintenance scripts (smoke_test.py, check.py)
+│   ├── tools/                     # offline maintenance scripts (smoke_test.py, check.py)
+│   └── workflows/terraform.yml    # Terraform formatting/validation; never auto-applies
 │
 ├── data/
 │   └── sample_docs/               # fake knowledge base indexed by RAG (no real data)
@@ -362,6 +367,28 @@ START → classify_request → safety_check → route_request ─┬─(escalate
 Fake "BrightSmile Dental Clinic" content only. The loader chunks by `##` headings,
 so keep one topic per section for good keyword retrieval. Never add real data/PII.
 
+### `infra/terraform/` — AWS adoption
+
+- **`bootstrap/`**: independent Terraform root stack for the private S3 state
+  bucket, versioning, AES256 encryption, public-access block, and
+  `prevent_destroy`. Apply it before initializing the dev backend.
+- **`environments/dev/`**: declarative representation and import blocks for the
+  existing ECR repository/lifecycle policy, ECS cluster/service/security group,
+  DynamoDB table/TTL, CloudWatch log group, and application IAM roles/policies.
+  The existing VPC, public subnets, GitHub OIDC provider, current ECS task
+  definition, and Route 53 zone are data/inputs rather than managed resources.
+- **Ownership boundary**: Terraform owns infrastructure baselines. Application
+  CD owns images, task-definition revisions, ECS releases, public-IP discovery,
+  Route 53 A-record updates, and deployment health checks. There is deliberately
+  no `aws_ecs_task_definition` or `aws_route53_record` resource; ECS service
+  `task_definition` changes are ignored.
+- **`environments/dev/README.md`**: read-only discovery commands, exact import
+  IDs, and operator-run adoption procedure. Never apply unless the reviewed plan
+  contains imports only and `0 add/change/destroy`, followed by a no-op plan.
+- **`scripts/validate.ps1`** and **`.github/workflows/terraform.yml`**: formatting
+  and backend-free validation only. Terraform apply is never part of ordinary
+  application deployment.
+
 ---
 
 ## 6. Cross-cutting concepts (must-know)
@@ -399,6 +426,8 @@ so keep one topic per section for good keyword retrieval. Never add real data/PI
 | New CRM record type | `domain/repositories.py` + both CRM adapters + `TicketType` + `intake_service` |
 | New shared dependency | `dependencies.Container` (+ `reset_*` + conftest) |
 | New config value | `core/config.Settings` + `.env.example` |
+| AWS infrastructure baseline | `infra/terraform/environments/dev/` + adoption guide |
+| Application deployment behavior | `.github/workflows/deploy.yml` + `.aws/ecs-task-definition.json` |
 
 ---
 
@@ -414,3 +443,7 @@ so keep one topic per section for good keyword retrieval. Never add real data/PI
   real `.env` is ignored.
 - `boto3` and `botocore` imports belong only in `infrastructure/dynamodb_crm.py`;
   `IntakeService` and the domain CRM protocol remain provider-neutral.
+- Terraform configuration describes existing live resources. Never infer that
+  import blocks were applied; check state and the post-adoption no-op plan.
+- Do not add task definitions or the changing API A record to Terraform. Those
+  remain owned by application CD to avoid competing writers.
