@@ -1,0 +1,13 @@
+aws_region = "us-east-1"
+vpc_id     = "vpc-0123456789abcdef0"
+
+subnet_ids = [
+  "subnet-0123456789abcdef0",
+  "subnet-0fedcba9876543210",
+]
+
+ecs_security_group_id = "sg-0123456789abcdef0"
+
+# Change these only if discovery shows different existing values.
+github_oidc_provider_arn = "arn:aws:iam::964866958896:oidc-provider/token.actions.githubusercontent.com"
+github_repository        = "etonealbert/doc-helper-ai-agent"

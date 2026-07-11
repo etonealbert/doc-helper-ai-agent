@@ -49,6 +49,7 @@ and easy to extend toward a real cloud deployment.
 | Testing            | pytest + httpx                          |
 | Linting            | ruff                                    |
 | Packaging / env    | uv                                      |
+| Infrastructure     | Terraform (existing-resource adoption)  |
 
 ## Architecture
 
@@ -102,6 +103,7 @@ src/doc_helper_ai_agent/
   infrastructure/    # vector_store, mock_crm, dynamodb_crm, mock_schedule
 data/sample_docs/    # fake clinic docs used by RAG
 tests/               # pytest suite (offline)
+infra/terraform/     # bootstrap state + adopt the existing dev AWS resources
 ```
 
 ## Local setup
@@ -295,6 +297,40 @@ as an **additive, named inline policy** on the existing
 the existing deployment workflow pass both ECS roles when registering the prepared
 task definition.
 
+## Terraform adoption
+
+Terraform configuration under [`infra/terraform/`](infra/terraform/) is an
+adoption/import project for the existing live AWS infrastructure, not a request
+to recreate it. The separate `bootstrap` root stack creates the private,
+versioned S3 backend. The `environments/dev` root stack uses declarative import
+blocks for the existing ECR, ECS, DynamoDB, CloudWatch, security group, and IAM
+resources.
+
+The ownership boundary prevents Terraform and application CD from changing the
+same mutable deployment properties:
+
+| Terraform owns | GitHub Actions application CD owns |
+| --- | --- |
+| ECR repository and lifecycle policy | Docker builds and immutable Git SHA tags |
+| ECS cluster and service baseline | Task-definition revisions and ECS deployments |
+| ECS security group | Public task-IP discovery and health checks |
+| CloudWatch log group | Route 53 A-record updates |
+| DynamoDB table and TTL | Application release cadence |
+| Application IAM roles/policies and remote state | Checked-in `.aws/ecs-task-definition.json` |
+
+Terraform intentionally does not define an ECS task definition or the changing
+`api.albertlukmanovlabs.lol` A record. The ECS service ignores
+`task_definition` drift because [`deploy.yml`](.github/workflows/deploy.yml)
+deploys each immutable revision. Existing public subnet IDs and the VPC ID are
+inputs; no custom VPC, ALB, NAT Gateway, or private subnet architecture is added.
+
+See the [dev adoption guide](infra/terraform/environments/dev/README.md) for
+read-only AWS discovery commands, exact import IDs, and the mandatory safety
+gate: the first applyable dev plan must contain imports only with `0 to add,
+0 to change, 0 to destroy`. The separate
+[`terraform.yml`](.github/workflows/terraform.yml) workflow only formats and
+validates Terraform; it never applies infrastructure.
+
 ## Developer experience
 
 ```bash
@@ -310,7 +346,9 @@ uv run ruff check .                                       # lint
 - [x] **CI/CD** (lint, test, container build, and ECS deployment workflow)
 - [x] **ECS deployment** workflow and task-definition integration
 - [x] **DynamoDB CRM persistence** implemented and prepared for deployment
-- [ ] **AWS DynamoDB provisioning and live persistence verification**
+- [x] **Terraform adoption configuration** with remote state, imports, and CI validation
+- [ ] **Terraform live adoption** after an imports-only plan and no-op verification
+- [ ] **AWS DynamoDB live persistence verification**
 - [ ] **Real vector DB** (Chroma persistence / managed vector store)
 - [ ] **Auth** (API keys / OAuth) and rate limiting
 - [ ] **Observability** (OpenTelemetry traces, metrics, dashboards)
