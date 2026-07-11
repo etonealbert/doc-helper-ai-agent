@@ -41,7 +41,7 @@ doc-helper-ai-agent/
 │   ├── environments/dev/           # dev resources, imports, discovery/execution guide
 │   └── scripts/validate.ps1        # local backend-free fmt/init/validate checks
 │
-├── .github/                       # agent & maintainer customization (see .github/README.md)
+├── .github/                       # agent & maintainer customization (see .github/AGENTS.md)
 │   ├── copilot-instructions.md    # always-on project guidelines
 │   ├── CODEBASE_MAP.md            # THIS FILE — full codebase reference
 │   ├── instructions/              # auto-attached rules (by applyTo glob or on-demand)

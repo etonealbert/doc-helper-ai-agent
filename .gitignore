@@ -34,13 +34,26 @@ chroma/
 .idea/
 .vscode/
 
-# Terraform local state, plans, and real environment values
+# Terraform working directories
 **/.terraform/*
+
+# Terraform state
 *.tfstate
 *.tfstate.*
+.terraform.tfstate.lock.info
+
+# Saved plans
 *.tfplan
+tfplan
+
+# Real environment values
 *.tfvars
+*.tfvars.json
 !*.tfvars.example
+
+# Terraform crash and local CLI configuration
 crash.log
 crash.*.log
+.terraformrc
+terraform.rc
 

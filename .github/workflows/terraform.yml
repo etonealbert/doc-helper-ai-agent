@@ -37,7 +37,7 @@ jobs:
 
       - name: Initialize bootstrap without backend
         working-directory: infra/terraform/bootstrap
-        run: terraform init -backend=false -input=false
+        run: terraform init -backend=false -input=false -lockfile=readonly
 
       - name: Validate bootstrap
         working-directory: infra/terraform/bootstrap
@@ -45,7 +45,7 @@ jobs:
 
       - name: Initialize dev without backend
         working-directory: infra/terraform/environments/dev
-        run: terraform init -backend=false -input=false
+        run: terraform init -backend=false -input=false -lockfile=readonly
 
       - name: Validate dev
         working-directory: infra/terraform/environments/dev
