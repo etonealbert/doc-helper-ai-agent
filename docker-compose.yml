@@ -23,6 +23,7 @@ services:
       # Mock mode = offline & deterministic. Set to "false" (and provide an
       # OPENAI_API_KEY via env_file below) to use real LLM/embeddings.
       ENABLE_MOCK_LLM: "true"
+      CRM_PROVIDER: "mock"
     # Load secrets/overrides from a local .env if present (optional).
     # env_file:
     #   - .env

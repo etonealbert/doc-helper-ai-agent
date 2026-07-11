@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from doc_helper_ai_agent.agent.graph import run_agent
-from doc_helper_ai_agent.core.errors import AgentExecutionError
+from doc_helper_ai_agent.core.errors import AgentExecutionError, DocHelperError
 from doc_helper_ai_agent.core.logging import get_logger, get_trace_id
 from doc_helper_ai_agent.domain.enums import Classification
 from doc_helper_ai_agent.schemas.chat import ChatRequest, ChatResponse
@@ -33,6 +33,8 @@ def chat(request: ChatRequest) -> ChatResponse:
             session_id=request.session_id,
             trace_id=trace_id,
         )
+    except DocHelperError:
+        raise
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Agent execution failed")
         raise AgentExecutionError("The assistant failed to process the request.") from exc

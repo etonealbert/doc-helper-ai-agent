@@ -8,7 +8,8 @@ deterministic mock mode** — no API key required.
 
 > ⚠️ **Disclaimer:** This is a **demo/portfolio project**. It is **not a medical
 > tool** and must never be used for diagnosis, prescription, or treatment
-> advice. It uses only **fake sample documents** and **no real patient data**.
+> advice. It is intended only for **fake demonstration data**; do not submit
+> real patient data.
 
 ---
 
@@ -28,7 +29,7 @@ and easy to extend toward a real cloud deployment.
 - 📚 **Local RAG** over markdown docs with **source citations**
 - 🛡️ **Safety service** that detects pain/bleeding/emergencies/diagnosis requests
   and **escalates to a human** instead of giving medical advice
-- 🗓️ **Mock scheduling & CRM** producing realistic IDs (`APPT-2026-0001`, …)
+- 🗓️ **Mock scheduling + selectable CRM storage** (in-memory or DynamoDB)
 - 🧾 **Structured JSON responses** with an auditable list of actions taken
 - 🔎 **Per-request `trace_id`** propagated through logs and responses
 - ✅ **Tests** that pass offline with no API key
@@ -71,10 +72,19 @@ flowchart TD
 
     RAG -.-> VS[(Local Vector Store)]
     AV -.-> SCH[(Mock Schedule)]
-    IN -.-> CRM[(Mock CRM)]
-    E -.-> CRM
+    IN -.-> SELECTED[Container.crm: selected CRMRepository]
+    E -.-> SELECTED
+
+    CONFIG{CRM_PROVIDER}
+    CONFIG -->|mock, mutually exclusive| MOCK[(In-memory Mock Adapter)]
+    CONFIG -->|dynamodb, mutually exclusive| DDB[(DynamoDB Adapter)]
+    MOCK --> SELECTED
+    DDB --> SELECTED
     F -->|structured JSON| API
 ```
+
+At startup, `dependencies.Container` follows exactly one `CRM_PROVIDER` branch and
+wires that adapter as the single `Container.crm` repository used by intake requests.
 
 ### Layout
 
@@ -85,11 +95,11 @@ src/doc_helper_ai_agent/
   api/routes/        # health, chat, documents
   core/              # config, logging, errors
   schemas/           # request/response models
-  domain/            # enums + internal models
+  domain/            # enums, internal models, repository protocols
   services/          # rag, document_loader, intake, safety
   agent/             # graph, nodes, state, prompts
   tools/             # appointment, crm, knowledge, escalation
-  infrastructure/    # vector_store, mock_crm, mock_schedule
+  infrastructure/    # vector_store, mock_crm, dynamodb_crm, mock_schedule
 data/sample_docs/    # fake clinic docs used by RAG
 tests/               # pytest suite (offline)
 ```
@@ -111,6 +121,19 @@ the defaults run fully offline):
 ```bash
 cp .env.example .env
 ```
+
+Local runs use the in-memory CRM by default. CRM persistence is configured with:
+
+| Variable | Local default | Purpose |
+| -------- | ------------- | ------- |
+| `CRM_PROVIDER` | `mock` | Select `mock` or `dynamodb` in the composition root |
+| `DYNAMODB_TABLE_NAME` | `doc-helper-records` | DynamoDB table used by the persistent adapter |
+| `AWS_REGION` | `us-east-1` | Region used to construct the DynamoDB resource |
+| `CRM_RECORD_TTL_DAYS` | `90` | Retention period used to calculate each record's TTL |
+
+`CRM_PROVIDER=mock` remains deterministic, offline, and process-local. Selecting
+`dynamodb` does not fall back to mock storage when AWS is unavailable; operational
+SDK failures use the API's `503 crm_unavailable` error contract.
 
 ## Run with Docker
 
@@ -243,6 +266,35 @@ deterministic and offline: keyword classification and keyword RAG retrieval. Set
 `ENABLE_MOCK_LLM=false`, `LLM_PROVIDER=openai`, and provide `OPENAI_API_KEY` to
 enable LLM classification, embedding-based retrieval, and LLM answer synthesis.
 
+CRM provider selection is independent of LLM mode. Changing `CRM_PROVIDER` does not
+change the local document loader, vector store, retrieval, citations, or RAG flow.
+
+## DynamoDB persistence and ECS roles
+
+The DynamoDB adapter stores one canonical item per intake operation. Every item has
+`record_id`, `record_type`, `user_id`, `status`, `priority`, `created_at`,
+`updated_at`, an operation-specific `payload` map, and numeric `expires_at` TTL.
+Persistent IDs use `<PREFIX>-<UTC_YEAR>-<12 uppercase UUID hex characters>` (for
+example, `APPT-2026-A1B2C3D4E5F6`); local mock IDs remain sequential.
+
+The checked-in ECS task definition is prepared to select DynamoDB. Its roles have
+separate responsibilities:
+
+- `DocHelperEcsTaskRole` is assumed by the running application and receives only
+  the DynamoDB `PutItem` permission in
+  [`.aws/iam/doc-helper-dynamodb-policy.json`](.aws/iam/doc-helper-dynamodb-policy.json).
+- `ecsTaskExecutionRole` is used by ECS to pull the image and publish task logs; it
+  is not the application's DynamoDB identity.
+
+The IAM files are deployment artifacts, not evidence that AWS resources were
+provisioned. Use the trust-policy artifact as `DocHelperEcsTaskRole`'s trust
+relationship and attach the DynamoDB permissions as a named inline policy. Apply
+[`github-actions-passrole-policy.json`](.aws/iam/github-actions-passrole-policy.json)
+as an **additive, named inline policy** on the existing
+`GitHubActionsDeployRole`; do not replace that role's unrelated policies. This lets
+the existing deployment workflow pass both ECS roles when registering the prepared
+task definition.
+
 ## Developer experience
 
 ```bash
@@ -255,14 +307,16 @@ uv run ruff check .                                       # lint
 ## Roadmap
 
 - [ ] **Frontend** (chat UI)
-- [ ] **AWS** deployment: Lambda + API Gateway, S3 for documents
+- [x] **CI/CD** (lint, test, container build, and ECS deployment workflow)
+- [x] **ECS deployment** workflow and task-definition integration
+- [x] **DynamoDB CRM persistence** implemented and prepared for deployment
+- [ ] **AWS DynamoDB provisioning and live persistence verification**
 - [ ] **Real vector DB** (Chroma persistence / managed vector store)
 - [ ] **Auth** (API keys / OAuth) and rate limiting
 - [ ] **Observability** (OpenTelemetry traces, metrics, dashboards)
-- [ ] **CI/CD** (lint + test + deploy pipeline)
 
 ## Disclaimer
 
 This is a demonstration project for portfolio purposes. It does **not** provide
-medical advice, diagnosis, or treatment, uses only **fake** sample documents,
-and stores **no real patient data**.
+medical advice, diagnosis, or treatment. It is intended only for **fake
+demonstration data**; users must not submit real patient data.

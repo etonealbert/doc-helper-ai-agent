@@ -51,6 +51,11 @@ class AgentExecutionError(DocHelperError):
     error_code = "agent_error"
 
 
+class CRMRepositoryError(DocHelperError):
+    status_code = 503
+    error_code = "crm_unavailable"
+
+
 def _error_body(error_code: str, message: str) -> dict[str, object]:
     return {
         "error": {

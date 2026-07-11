@@ -77,11 +77,12 @@ doc-helper-ai-agent/
 │       │   ├── documents.py       # DocumentInfo, Documents*/Search* models
 │       │   └── tools.py           # ActionResult (uniform tool-result contract)
 │       │
-│       ├── domain/                # internal models & enums (no HTTP concerns)
+│       ├── domain/                # internal models, enums, and repository protocols
 │       │   ├── enums.py           # Classification, Route, Specialty, ToolStatus, TicketType
-│       │   └── models.py          # Doctor, TimeSlot, SafetyAssessment, RetrievedChunk, RagResult
+│       │   ├── models.py          # Doctor, TimeSlot, SafetyAssessment, RetrievedChunk, RagResult
+│       │   └── repositories.py    # CRMRepository protocol used by services and adapters
 │       │
-│       ├── services/              # business logic over infrastructure
+│       ├── services/              # business logic for intake, RAG, documents, and safety
 │       │   ├── document_loader.py # load_documents() -> chunk markdown
 │       │   ├── rag_service.py     # RagService (index + answer with citations)
 │       │   ├── safety_service.py  # assess_message() -> SafetyAssessment
@@ -99,8 +100,9 @@ doc-helper-ai-agent/
 │       │   ├── knowledge_tools.py    # answer_question (RAG)
 │       │   └── escalation_tools.py   # escalate_to_human
 │       │
-│       └── infrastructure/        # swappable adapters (mock external systems)
-│           ├── mock_crm.py        # MockCRM (in-memory, generates APPT-/ESC-... IDs)
+│       └── infrastructure/        # swappable adapters for external systems
+│           ├── mock_crm.py        # MockCRMRepository (in-memory, sequential IDs)
+│           ├── dynamodb_crm.py    # DynamoDBCRMRepository (canonical persistent records)
 │           ├── mock_schedule.py   # MockSchedule (doctors + deterministic slots)
 │           └── vector_store.py    # LocalVectorStore (keyword or optional embeddings)
 │
@@ -110,6 +112,7 @@ doc-helper-ai-agent/
     ├── test_chat_api.py           # /api/chat + /api/documents end-to-end
     ├── test_safety_service.py     # risk detection
     ├── test_intake_service.py     # CRM ID formats & increments
+    ├── test_dynamodb_crm.py       # provider selection, records, SDK boundary/errors
     ├── test_rag_service.py        # retrieval + citations
     └── test_agent_routing.py      # graph routing per intent
 ```
@@ -121,15 +124,19 @@ doc-helper-ai-agent/
 One-way only. **Never import "upward".**
 
 ```
-api/routes  →  agent  →  tools  →  services  →  infrastructure
+api/routes  →  agent  →  tools  →  services / infrastructure
                                    ↘  domain / schemas / core (shared, no upward deps)
+
+CRM path: IntakeService  →  CRMRepository protocol  ←  mock/DynamoDB adapters
 ```
 
 - `api` speaks HTTP and calls the agent (and, for documents, services via the container).
 - `agent` nodes call `tools`.
-- `tools` call `services`/infrastructure through the `Container`.
-- `services` orchestrate `infrastructure`.
-- `infrastructure` are leaf adapters (mock CRM/schedule/vector store).
+- `tools` call services and selected adapters through the `Container`.
+- For CRM intake only, `IntakeService` depends on the domain `CRMRepository` protocol,
+  and the mock and DynamoDB infrastructure adapters implement that protocol.
+- The existing RAG path is unchanged: `RagService` uses the concrete
+  infrastructure `LocalVectorStore`.
 - `domain`, `schemas`, and `core` are shared and depend on nothing app-specific.
 
 The single wiring point is `dependencies.Container`.
@@ -195,7 +202,8 @@ START → classify_request → safety_check → route_request ─┬─(escalate
 
 - **`config.py`**
   - `Settings(BaseSettings)`: env-driven config (aliases like `APP_NAME`,
-    `OPENAI_API_KEY`, `LLM_PROVIDER`, `ENABLE_MOCK_LLM`, `RAG_TOP_K`, paths).
+    `OPENAI_API_KEY`, `LLM_PROVIDER`, `ENABLE_MOCK_LLM`, `RAG_TOP_K`, CRM provider,
+    DynamoDB table/region/TTL, and paths).
   - Properties: `use_real_llm` (LLM gen/classify), `use_embeddings` (embedding RAG),
     `sample_docs_path`, `chroma_path`. `PROJECT_ROOT` is derived from this file's path.
   - `get_settings()`: `lru_cache`d singleton. Tests call `get_settings.cache_clear()`.
@@ -204,7 +212,8 @@ START → classify_request → safety_check → route_request ─┬─(escalate
   `set_trace_id/get_trace_id` (backed by a `ContextVar`), `_TraceIdFilter` injects
   `trace_id` into every record. Never log secrets.
 - **`errors.py`**: `DocHelperError` (base) + `NotFoundError`, `ValidationError`,
-  `AgentExecutionError`; `register_exception_handlers(app)` returns JSON
+  `AgentExecutionError`, `CRMRepositoryError` (HTTP 503 / `crm_unavailable`);
+  `register_exception_handlers(app)` returns JSON
   `{error:{code,message,trace_id}}` and logs.
 
 ### `schemas/` — HTTP models (Pydantic v2)
@@ -228,14 +237,25 @@ START → classify_request → safety_check → route_request ─┬─(escalate
 - **`models.py`**: `Doctor`, `TimeSlot`, `SafetyAssessment{triggered,categories,
   reason,recommended_action}`, `RetrievedChunk{id,text,source,score}`,
   `RagResult{answer,sources,chunks}`.
+- **`repositories.py`**: `CRMRepository` protocol defining the four intake write
+  operations. `IntakeService` depends on this boundary; both CRM adapters implement it.
 
-### `infrastructure/` — mock adapters (leaf, in-memory)
+### `infrastructure/` — external-system adapters
 
-- **`mock_crm.py`**: `MockCRM` with `create_appointment_request`,
+- **`mock_crm.py`**: `MockCRMRepository` (also exported as `MockCRM`) with
+  `create_appointment_request`,
   `create_callback_request`, `create_complaint_ticket`,
   `create_human_escalation_ticket`, plus `get`/`all`. IDs like
   `APPT-2026-0001`, `CALLBACK-…`, `COMPLAINT-…`, `ESC-…` (thread-safe counters).
   Singletons: `get_crm()`, `reset_crm()`.
+- **`dynamodb_crm.py`**: `DynamoDBCRMRepository` writes appointments, callbacks,
+  complaints, and escalations to the configured table. Stored items use canonical
+  top-level fields `record_id`, `record_type`, `user_id`, `status`, `priority`,
+  `created_at`, `updated_at`, `payload`, and numeric TTL `expires_at`. IDs retain the
+  existing prefix and UTC year but use 12 uppercase UUID hex characters to avoid
+  process-local counters. Conditional writes prevent ID replacement. Operational AWS
+  SDK failures become `CRMRepositoryError` (503); programming/validation errors propagate.
+  This is the only application module allowed to import `boto3` or `botocore`.
 - **`mock_schedule.py`**: `MockSchedule.check_availability(specialty, preferred_day,
   limit)` → deterministic `TimeSlot`s from `_DOCTORS` + `_SLOT_TEMPLATE`.
   `list_doctors(specialty)`. Singletons: `get_schedule()`, `reset_schedule()`.
@@ -261,7 +281,7 @@ START → classify_request → safety_check → route_request ─┬─(escalate
   Whole-word regex over `_RISK_KEYWORDS` categories: `severe_pain, bleeding,
   swelling, fever, trauma, diagnosis_request, medication_request, emergency`.
   On any match: `triggered=True` + a fixed `recommended_action` (no medical advice).
-- **`intake_service.py`**: `IntakeService` wraps `MockCRM`:
+- **`intake_service.py`**: `IntakeService` accepts the domain `CRMRepository` protocol:
   `create_appointment/create_callback/create_complaint/create_escalation`.
   Singletons: `get_intake_service(crm)`, `reset_intake_service()`.
 
@@ -320,8 +340,10 @@ START → classify_request → safety_check → route_request ─┬─(escalate
 
 ### `dependencies.py`
 
-- **`Container`**: holds `settings, crm, schedule, vector_store, rag, intake`
-  (all shared singletons). `get_container()` / `reset_container()`.
+- **`Container`**: holds `settings, crm, schedule, vector_store, rag, intake`.
+  `_build_crm_repository()` selects the in-memory singleton for `CRM_PROVIDER=mock`
+  or constructs `DynamoDBCRMRepository` for `CRM_PROVIDER=dynamodb`; there is no
+  automatic fallback after DynamoDB errors. `get_container()` / `reset_container()`.
 - **Rule:** add new shared dependencies here, not as scattered globals.
 
 ### `tests/`
@@ -331,6 +353,9 @@ START → classify_request → safety_check → route_request ─┬─(escalate
   returns a FastAPI `TestClient`.
 - Test files map 1:1 to the requirements (health, chat API, safety, intake, RAG,
   routing). All pass offline with no API key.
+- **`test_dynamodb_crm.py`**: verifies provider selection, canonical Moto-backed
+  writes, UUID-based IDs, TTL and conditional writes, error translation and safe
+  logging, and that AWS SDK imports remain isolated to the DynamoDB adapter.
 
 ### `data/sample_docs/`
 
@@ -345,6 +370,10 @@ so keep one topic per section for good keyword retrieval. Never add real data/PI
   when `ENABLE_MOCK_LLM=false`, `LLM_PROVIDER=openai`, and `OPENAI_API_KEY` is set
   (`settings.use_real_llm` / `use_embeddings`). Every LLM/embedding call has a
   keyword/mock fallback inside `try/except`.
+- **CRM selection is explicit.** Local settings and Docker Compose use
+  `CRM_PROVIDER=mock`; ECS is prepared with `CRM_PROVIDER=dynamodb`. The container
+  selects exactly one implementation of `CRMRepository`, and DynamoDB failures never
+  fall back to in-memory records.
 - **Singletons + reset.** Shared state lives behind `get_*()` singletons and the
   `Container`. Any new singleton needs a `reset_*()` and a call in `conftest.py`.
 - **`trace_id`** is generated per request in middleware, flows through logs via a
@@ -367,7 +396,7 @@ so keep one topic per section for good keyword retrieval. Never add real data/PI
 | New route/branch | `domain/enums.Route` + `nodes._decide_route` + `graph.py` conditional edge |
 | New knowledge doc | add `.md` under `data/sample_docs/`, verify via `/api/documents` |
 | New risk term | `services/safety_service._RISK_KEYWORDS` + `tests/test_safety_service.py` |
-| New CRM record type | `infrastructure/mock_crm` + `TicketType` + `intake_service` |
+| New CRM record type | `domain/repositories.py` + both CRM adapters + `TicketType` + `intake_service` |
 | New shared dependency | `dependencies.Container` (+ `reset_*` + conftest) |
 | New config value | `core/config.Settings` + `.env.example` |
 
@@ -383,3 +412,5 @@ so keep one topic per section for good keyword retrieval. Never add real data/PI
 - `AgentState.actions` must be initialised to `[]` (the `add` reducer needs a list).
 - `.env.example` is intentionally kept in git (`.gitignore` has `!.env.example`);
   real `.env` is ignored.
+- `boto3` and `botocore` imports belong only in `infrastructure/dynamodb_crm.py`;
+  `IntakeService` and the domain CRM protocol remain provider-neutral.
