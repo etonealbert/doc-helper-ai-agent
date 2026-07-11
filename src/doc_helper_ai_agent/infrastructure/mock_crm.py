@@ -23,7 +23,7 @@ _PREFIX: dict[TicketType, str] = {
 }
 
 
-class MockCRM:
+class MockCRMRepository:
     """A minimal, thread-safe, in-memory CRM."""
 
     def __init__(self) -> None:
@@ -120,14 +120,17 @@ class MockCRM:
         return list(self._records.values())
 
 
-_crm: MockCRM | None = None
+MockCRM = MockCRMRepository
 
 
-def get_crm() -> MockCRM:
-    """Return the process-wide :class:`MockCRM` singleton."""
+_crm: MockCRMRepository | None = None
+
+
+def get_crm() -> MockCRMRepository:
+    """Return the process-wide mock CRM repository singleton."""
     global _crm
     if _crm is None:
-        _crm = MockCRM()
+        _crm = MockCRMRepository()
     return _crm
 
 

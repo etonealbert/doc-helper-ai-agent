@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -47,6 +48,12 @@ class Settings(BaseSettings):
     # --- Vector store / RAG ---
     vector_store_provider: str = Field(default="local", alias="VECTOR_STORE_PROVIDER")
     rag_top_k: int = Field(default=3, alias="RAG_TOP_K")
+
+    # --- CRM ---
+    crm_provider: Literal["mock", "dynamodb"] = Field(default="mock", alias="CRM_PROVIDER")
+    dynamodb_table_name: str = Field(default="doc-helper-records", alias="DYNAMODB_TABLE_NAME")
+    aws_region: str = Field(default="us-east-1", alias="AWS_REGION")
+    crm_record_ttl_days: int = Field(default=90, alias="CRM_RECORD_TTL_DAYS")
 
     # --- Paths (relative to project root unless absolute) ---
     data_dir: str = Field(default="data", alias="DATA_DIR")

@@ -4,12 +4,32 @@ from __future__ import annotations
 
 import re
 
-from doc_helper_ai_agent.infrastructure.mock_crm import MockCRM
+from doc_helper_ai_agent.domain.repositories import CRMRepository
+from doc_helper_ai_agent.infrastructure.mock_crm import MockCRM, MockCRMRepository
 from doc_helper_ai_agent.services.intake_service import IntakeService
 
 
 def _service() -> IntakeService:
-    return IntakeService(MockCRM())
+    return IntakeService(MockCRMRepository())
+
+
+def _accepts_repository(repository: CRMRepository) -> CRMRepository:
+    return repository
+
+
+def test_mock_crm_compatibility_alias():
+    assert MockCRM is MockCRMRepository
+
+
+def test_intake_service_keeps_injected_repository():
+    repository = MockCRMRepository()
+    service = IntakeService(repository)
+    assert service._crm is repository
+
+
+def test_mock_repository_matches_protocol_shape():
+    repository = MockCRMRepository()
+    assert _accepts_repository(repository) is repository
 
 
 def test_appointment_id_format():

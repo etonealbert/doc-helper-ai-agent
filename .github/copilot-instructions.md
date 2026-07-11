@@ -7,6 +7,29 @@ must always run and pass tests **offline without an API key**.
 > purpose and key symbols, the request lifecycle, and "where to edit for X" —
 > read [CODEBASE_MAP.md](CODEBASE_MAP.md). Keep it updated when structure changes.
 
+## Required documentation context
+
+Before changing code, build context from these sources in order:
+
+1. [CODEBASE_MAP.md](CODEBASE_MAP.md) — authoritative module map, dependency
+   direction, request flow, public symbols, configuration, and change recipes.
+2. [README.md](../README.md) — user-facing architecture, setup, API examples,
+   deployment status, persistence behavior, safety boundaries, and roadmap.
+3. [DynamoDB CRM design](../docs/superpowers/specs/2026-07-10-dynamodb-crm-design.md)
+   — approved repository boundary, record contract, error handling, IAM model,
+   and explicit out-of-scope work.
+4. [DynamoDB CRM implementation plan](../docs/superpowers/plans/2026-07-10-dynamodb-crm-implementation.md)
+   — exact files, test coverage, local verification gates, and the operator-run
+   AWS handoff. AWS provisioning and deployment commands are not agent defaults.
+5. The matching file under [instructions/](instructions/) before editing Python,
+   tests, tools, agent workflow, or safety-sensitive behavior.
+
+Treat the current code and tests as the runtime source of truth if documentation
+has drifted. Update `CODEBASE_MAP.md` and `README.md` whenever architecture,
+configuration, public modules, deployment artifacts, or supported behavior changes.
+Do not infer that local AWS artifacts have been applied: distinguish implemented
+code from provisioned infrastructure and verified production behavior.
+
 ## Build, run, and test
 
 - Install deps: `uv sync`

@@ -1,8 +1,8 @@
 """Intake service.
 
-A thin orchestration layer over the mock CRM for the different intake flows:
-appointments, callbacks, complaints, and human escalations. Keeping this logic
-here (rather than in the agent nodes) makes it independently testable.
+A thin orchestration layer over the configured CRM repository for the different
+intake flows: appointments, callbacks, complaints, and human escalations. Keeping
+this logic here (rather than in the agent nodes) makes it independently testable.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from typing import Any
 
 from doc_helper_ai_agent.core.logging import get_logger
 from doc_helper_ai_agent.domain.models import TimeSlot
-from doc_helper_ai_agent.infrastructure.mock_crm import MockCRM
+from doc_helper_ai_agent.domain.repositories import CRMRepository
 
 logger = get_logger(__name__)
 
@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 class IntakeService:
     """Create CRM records for the various intake workflows."""
 
-    def __init__(self, crm: MockCRM) -> None:
+    def __init__(self, crm: CRMRepository) -> None:
         self._crm = crm
 
     def create_appointment(
@@ -67,7 +67,7 @@ class IntakeService:
 _service: IntakeService | None = None
 
 
-def get_intake_service(crm: MockCRM) -> IntakeService:
+def get_intake_service(crm: CRMRepository) -> IntakeService:
     """Return the process-wide :class:`IntakeService` singleton."""
     global _service
     if _service is None:

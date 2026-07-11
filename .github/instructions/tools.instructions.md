@@ -17,8 +17,9 @@ serialisable audit record.
   and `get_container().<service>`. Do not construct services directly.
 - Keep tools deterministic in mock mode; do not call the network unless a service
   behind them is explicitly gated by settings.
-- Set `status=ToolStatus.ERROR` and put a `"message"` in `result` on failure —
-  never raise out of a tool used by a node.
+- Ordinary recoverable tool failures may return `ToolStatus.ERROR` with a safe
+  message. Transactional record-creation tools must propagate persistence
+  failures so the graph cannot imply that a ticket was created.
 
 ## Template
 
