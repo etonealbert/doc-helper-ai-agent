@@ -169,50 +169,50 @@ jobs:
           exit 1
 
       - name: Update ECS origin DNS
-  env:
-    HOSTED_ZONE_ID: ${{ secrets.HOSTED_ZONE_ID }}
-    ORIGIN_DNS_NAME: origin-api.albertlukmanovlabs.lol
-  shell: bash
-  run: |
-    set -euo pipefail
+        env:
+          HOSTED_ZONE_ID: ${{ secrets.HOSTED_ZONE_ID }}
+          ORIGIN_DNS_NAME: origin-api.albertlukmanovlabs.lol
+        shell: bash
+        run: |
+          set -euo pipefail
 
-    if [ -z "${PUBLIC_IP:-}" ]; then
-      echo "ERROR: PUBLIC_IP was not produced by the health-check step."
-      exit 1
-    fi
+          if [ -z "${PUBLIC_IP:-}" ]; then
+            echo "ERROR: PUBLIC_IP was not produced by the health-check step."
+            exit 1
+          fi
 
-    echo "Updating ${ORIGIN_DNS_NAME} to ${PUBLIC_IP}"
+          echo "Updating ${ORIGIN_DNS_NAME} to ${PUBLIC_IP}"
 
-    cat > route53-change.json <<EOF
-    {
-      "Comment": "Update Doc Helper ECS origin task IP",
-      "Changes": [
-        {
-          "Action": "UPSERT",
-          "ResourceRecordSet": {
-            "Name": "${ORIGIN_DNS_NAME}",
-            "Type": "A",
-            "TTL": 60,
-            "ResourceRecords": [
+          cat > route53-change.json <<EOF
+          {
+            "Comment": "Update Doc Helper ECS origin task IP",
+            "Changes": [
               {
-                "Value": "${PUBLIC_IP}"
+                "Action": "UPSERT",
+                "ResourceRecordSet": {
+                  "Name": "${ORIGIN_DNS_NAME}",
+                  "Type": "A",
+                  "TTL": 60,
+                  "ResourceRecords": [
+                    {
+                      "Value": "${PUBLIC_IP}"
+                    }
+                  ]
+                }
               }
             ]
           }
-        }
-      ]
-    }
-    EOF
+          EOF
 
-    CHANGE_ID=$(aws route53 change-resource-record-sets \
-      --hosted-zone-id "${HOSTED_ZONE_ID}" \
-      --change-batch file://route53-change.json \
-      --query 'ChangeInfo.Id' \
-      --output text)
+          CHANGE_ID=$(aws route53 change-resource-record-sets \
+            --hosted-zone-id "${HOSTED_ZONE_ID}" \
+            --change-batch file://route53-change.json \
+            --query 'ChangeInfo.Id' \
+            --output text)
 
-    aws route53 wait resource-record-sets-changed \
-      --id "${CHANGE_ID}"
+          aws route53 wait resource-record-sets-changed \
+            --id "${CHANGE_ID}"
 
-    echo "Origin DNS updated:"
-    echo "${ORIGIN_DNS_NAME} -> ${PUBLIC_IP}"
-    echo "Public API URL: https://api.albertlukmanovlabs.lol/docs"
+          echo "Origin DNS updated:"
+          echo "${ORIGIN_DNS_NAME} -> ${PUBLIC_IP}"
+          echo "Public API URL: https://api.albertlukmanovlabs.lol/docs"
