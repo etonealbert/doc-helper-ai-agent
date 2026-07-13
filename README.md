@@ -306,6 +306,12 @@ versioned S3 backend. The `environments/dev` root stack uses declarative import
 blocks for the existing ECR, ECS, DynamoDB, CloudWatch, security group, and IAM
 resources.
 
+**Status:** configuration is complete, but live adoption is not. Adoption is
+complete only after the imports-only saved plan is applied and a second
+`terraform plan -detailed-exitcode` exits `0` with no changes. DynamoDB live
+verification remains separate and requires creating a fake record through the
+deployed API and reading it from the live table.
+
 The ownership boundary prevents Terraform and application CD from changing the
 same mutable deployment properties:
 
@@ -330,6 +336,14 @@ gate: the first applyable dev plan must contain imports only with `0 to add,
 0 to change, 0 to destroy`. The separate
 [`terraform.yml`](.github/workflows/terraform.yml) workflow only formats and
 validates Terraform; it never applies infrastructure.
+
+The deployment role's complete permission inventory must be preserved during
+adoption. In addition to the Terraform-represented `iam:PassRole` permission,
+[`deploy.yml`](.github/workflows/deploy.yml) requires ECR authentication/image
+push, ECS registration/deployment and task discovery, EC2 network-interface
+discovery, and Route 53 record update/waiter permissions. Exact actions and
+resource scopes are documented in the
+[dev adoption guide](infra/terraform/environments/dev/README.md#github-deployment-role-permissions).
 
 ## Developer experience
 

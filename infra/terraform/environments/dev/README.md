@@ -4,6 +4,11 @@ This stack adopts the existing Doc Helper AWS infrastructure. It is not a
 greenfield deployment. Do not apply until the import plan contains imports only
 and reports `0 to add, 0 to change, 0 to destroy`.
 
+**Current status:** the Terraform configuration and import declarations exist,
+but the live resources are not considered adopted until the reviewed import plan
+has been applied and a subsequent `terraform plan -detailed-exitcode` exits `0`
+with no changes.
+
 ## Ownership Boundary
 
 Terraform owns the ECR repository and lifecycle policy, ECS cluster and service
@@ -96,6 +101,35 @@ If either inline IAM policy has a different live name, update both its `name` in
 policy does not exist, this is not yet an imports-only adoption; stop and decide
 whether a separately reviewed post-adoption addition is appropriate.
 
+The configured GitHub OIDC trust permits only workflow tokens for the repository's
+`main` branch. If discovery shows the live role still trusts
+`repo:etonealbert/doc-helper-ai-agent:*`, tighten the live trust relationship in a
+separate reviewed change before adoption so the import plan can remain unchanged.
+
+## GitHub Deployment Role Permissions
+
+Terraform currently represents the role trust relationship and the named
+`GitHubActionsPassEcsRoles` inline policy. It deliberately does not guess or
+replace the role's other existing policies. Before adoption, inventory every
+managed and inline policy returned by the discovery commands and retain the
+permissions required by `.github/workflows/deploy.yml`:
+
+| Service | Required actions | Scope |
+| --- | --- | --- |
+| ECR authentication | `ecr:GetAuthorizationToken` | `*` |
+| ECR image push | `ecr:BatchCheckLayerAvailability`, `ecr:CompleteLayerUpload`, `ecr:InitiateLayerUpload`, `ecr:PutImage`, `ecr:UploadLayerPart` | `doc-helper-ai-agent` repository ARN |
+| ECS deployment | `ecs:DescribeServices`, `ecs:DescribeTaskDefinition`, `ecs:RegisterTaskDefinition`, `ecs:UpdateService` | Task-definition registration requires `*`; scope other actions where AWS supports it |
+| ECS health discovery | `ecs:ListTasks`, `ecs:DescribeTasks` | `doc-helper-cluster` and its tasks/services where supported |
+| EC2 public-IP discovery | `ec2:DescribeNetworkInterfaces` | `*` because EC2 describe actions do not support resource-level permissions |
+| Route 53 DNS update | `route53:ChangeResourceRecordSets` | Hosted-zone ARN for `albertlukmanovlabs.lol` |
+| Route 53 waiter | `route53:GetChange` | `arn:aws:route53:::change/*` |
+| Role delegation | `iam:PassRole` | Only `ecsTaskExecutionRole` and `DocHelperEcsTaskRole`, restricted to `ecs-tasks.amazonaws.com` |
+
+These permissions may remain in existing attached or inline policies during the
+initial import. Do not delete or replace them merely because only the additive
+PassRole policy is shown in `iam.tf`. If full policy management is added later,
+represent and import each policy before Terraform takes ownership.
+
 ## Import IDs
 
 | Terraform address | Import ID |
@@ -146,8 +180,8 @@ The checked-in HCL must describe the live configuration exactly before adoption.
 terraform -chdir=infra/terraform/environments/dev init
 terraform -chdir=infra/terraform/environments/dev fmt -check
 terraform -chdir=infra/terraform/environments/dev validate
-terraform -chdir=infra/terraform/environments/dev plan -out=tfplan
-terraform -chdir=infra/terraform/environments/dev show tfplan
+terraform -chdir=infra/terraform/environments/dev plan -out=dev.tfplan
+terraform -chdir=infra/terraform/environments/dev show dev.tfplan
 ```
 
 Proceed only when the plan reports all expected imports and exactly:
@@ -163,7 +197,7 @@ to match live AWS and generate a new saved plan. Never use `-target` to hide dri
 ### 4. Apply the reviewed import plan
 
 ```powershell
-terraform -chdir=infra/terraform/environments/dev apply tfplan
+terraform -chdir=infra/terraform/environments/dev apply dev.tfplan
 terraform -chdir=infra/terraform/environments/dev plan -detailed-exitcode
 ```
 
@@ -172,6 +206,7 @@ present and must be investigated.
 
 ### 5. Complete adoption and verify health
 
+Only after the no-op plan exits `0` does Terraform adoption count as complete.
 After Terraform owns `/ecs/doc-helper-ai-task`, remove
 `awslogs-create-group` from `.aws/ecs-task-definition.json` in a separate reviewed
 application deployment. Then verify both the direct service and DNS health paths:
@@ -182,6 +217,8 @@ Invoke-RestMethod http://api.albertlukmanovlabs.lol:8000/health
 
 The application deployment workflow remains responsible for resolving the newest
 task public IP, testing `/health`, and updating Route 53 after task replacement.
+Until adoption succeeds, `awslogs-create-group` intentionally remains in the task
+definition so application deployments cannot fail because the log group is absent.
 
 ## Automation
 
