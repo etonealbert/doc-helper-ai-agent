@@ -77,9 +77,10 @@ class MockSchedule:
         days = list(_WEEKDAYS)
         if preferred_day:
             normalized = preferred_day.strip().lower()
-            if normalized in days:
-                days.remove(normalized)
-                days.insert(0, normalized)
+            if normalized not in days:
+                return []
+            days.remove(normalized)
+            days.insert(0, normalized)
 
         template = _SLOT_TEMPLATE.get(specialty, _SLOT_TEMPLATE[Specialty.GENERAL_DENTISTRY])
         slots: list[TimeSlot] = []

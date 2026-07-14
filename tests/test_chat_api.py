@@ -21,6 +21,7 @@ def test_chat_returns_structured_response(client):
             "message": "How much does teeth whitening cost?",
             "user_id": "demo-user",
             "session_id": "demo-session",
+            "locale": "en",
         },
     )
     assert response.status_code == 200
@@ -31,12 +32,39 @@ def test_chat_returns_structured_response(client):
     assert data["sources"], "pricing question should cite sources"
     assert data["trace_id"]
     assert data["message"]
+    assert data["locale"] == "en"
+
+
+def test_chat_defaults_to_spanish(client):
+    response = client.post(
+        "/api/chat",
+        json={"message": "¿Cuánto cuesta el blanqueamiento dental?"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["classification"] == "pricing_question"
+    assert data["locale"] == "es"
+    assert data["sources"]
+    assert "Según nuestros documentos" in data["message"]
+
+
+def test_chat_rejects_unsupported_locale(client):
+    response = client.post(
+        "/api/chat",
+        json={"message": "Hello", "locale": "fr"},
+    )
+
+    assert response.status_code == 422
 
 
 def test_chat_appointment_flow(client):
     response = client.post(
         "/api/chat",
-        json={"message": "I need to book an appointment for whitening next Friday"},
+        json={
+            "message": "I need to book an appointment for whitening next Friday",
+            "locale": "en",
+        },
     )
     data = response.json()
     assert data["classification"] == "appointment_request"
@@ -48,7 +76,10 @@ def test_chat_appointment_flow(client):
 def test_chat_emergency_requires_human(client):
     response = client.post(
         "/api/chat",
-        json={"message": "I have severe pain and my gum is bleeding badly"},
+        json={
+            "message": "I have severe pain and my gum is bleeding badly",
+            "locale": "en",
+        },
     )
     data = response.json()
     assert data["classification"] == "emergency_or_pain"
@@ -70,6 +101,7 @@ def test_chat_preserves_crm_unavailable_error(client, monkeypatch):
         json={
             "message": "I have severe pain and my gum is bleeding",
             "user_id": "failure-user",
+            "locale": "en",
         },
     )
     body = response.json()

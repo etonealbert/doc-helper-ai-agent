@@ -49,28 +49,34 @@ def main() -> int:
     check("health status", resp.status_code == 200, f"HTTP {resp.status_code}")
     check("health payload", resp.json().get("status") == "ok")
 
-    # 2) Pricing question -> RAG with sources
-    resp = client.post("/api/chat", json={"message": "How much does teeth whitening cost?"})
+    # 2) Spanish-default pricing question -> Spanish RAG with sources
+    resp = client.post("/api/chat", json={"message": "¿Cuánto cuesta el blanqueamiento dental?"})
     data = resp.json()
     check("pricing classification", data.get("classification") == "pricing_question")
     check("pricing has sources", bool(data.get("sources")))
     check("pricing not escalated", data.get("requires_human") is False)
+    check("Spanish is the default", data.get("locale") == "es")
+    check("pricing answer is Spanish", "Según nuestros documentos" in data.get("message", ""))
 
     # 3) Appointment request -> availability + intake
     resp = client.post(
         "/api/chat",
-        json={"message": "I need to book an appointment for whitening next Friday"},
+        json={
+            "message": "I need to book an appointment for whitening next Friday",
+            "locale": "en",
+        },
     )
     data = resp.json()
     tools_used = [a["tool"] for a in data.get("actions", [])]
     check("appointment classification", data.get("classification") == "appointment_request")
     check("appointment checked availability", "check_availability" in tools_used)
     check("appointment created request", "create_appointment_request" in tools_used)
+    check("English locale honored", data.get("locale") == "en")
 
     # 4) Emergency -> escalate, requires human, no diagnosis
     resp = client.post(
         "/api/chat",
-        json={"message": "I have severe pain and my gum is bleeding"},
+        json={"message": "Tengo dolor intenso y la encía está sangrando"},
     )
     data = resp.json()
     tools_used = [a["tool"] for a in data.get("actions", [])]

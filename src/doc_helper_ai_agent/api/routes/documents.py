@@ -35,9 +35,10 @@ def list_documents() -> DocumentsResponse:
 def search_documents(request: DocumentSearchRequest) -> DocumentSearchResponse:
     """Run RAG directly against the knowledge base (bypassing the full agent)."""
     rag = get_container().rag
-    result = rag.answer(request.query, top_k=request.top_k)
+    result = rag.answer(request.query, top_k=request.top_k, locale=request.locale)
     return DocumentSearchResponse(
         answer=result.answer,
         sources=result.sources,
         trace_id=get_trace_id(),
+        locale=request.locale,
     )

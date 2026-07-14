@@ -18,6 +18,7 @@ class AgentState(TypedDict, total=False):
     user_id: str
     session_id: str
     trace_id: str
+    locale: str
 
     # Derived
     classification: str

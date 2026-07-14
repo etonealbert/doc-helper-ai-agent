@@ -4,16 +4,18 @@ from __future__ import annotations
 
 from doc_helper_ai_agent.core.logging import get_logger
 from doc_helper_ai_agent.dependencies import get_container
-from doc_helper_ai_agent.domain.enums import ToolStatus
+from doc_helper_ai_agent.domain.enums import Locale, ToolStatus
 from doc_helper_ai_agent.schemas.tools import ActionResult
 
 logger = get_logger(__name__)
 
 
-def answer_question(question: str, top_k: int | None = None) -> ActionResult:
+def answer_question(
+    question: str, top_k: int | None = None, *, locale: Locale = Locale.ES
+) -> ActionResult:
     """Run RAG over the knowledge base and return an answer with sources."""
     container = get_container()
-    result = container.rag.answer(question, top_k=top_k)
+    result = container.rag.answer(question, top_k=top_k, locale=locale)
     return ActionResult(
         tool="answer_with_rag",
         status=ToolStatus.SUCCESS,

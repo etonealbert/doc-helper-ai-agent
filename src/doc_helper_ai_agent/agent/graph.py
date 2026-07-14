@@ -24,6 +24,7 @@ from langgraph.graph import END, START, StateGraph
 from doc_helper_ai_agent.agent import nodes
 from doc_helper_ai_agent.agent.state import AgentState
 from doc_helper_ai_agent.core.logging import get_logger
+from doc_helper_ai_agent.domain.enums import Locale
 
 logger = get_logger(__name__)
 
@@ -78,13 +79,21 @@ def get_agent():
     return _compiled
 
 
-def run_agent(*, message: str, user_id: str, session_id: str, trace_id: str) -> dict[str, Any]:
+def run_agent(
+    *,
+    message: str,
+    user_id: str,
+    session_id: str,
+    trace_id: str,
+    locale: Locale = Locale.ES,
+) -> dict[str, Any]:
     """Execute the agent workflow and return the final state."""
     initial: AgentState = {
         "message": message,
         "user_id": user_id,
         "session_id": session_id,
         "trace_id": trace_id,
+        "locale": locale.value,
         "actions": [],
         "sources": [],
     }

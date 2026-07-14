@@ -51,10 +51,11 @@ doc-helper-ai-agent/
 │
 ├── data/
 │   └── sample_docs/               # fake knowledge base indexed by RAG (no real data)
-│       ├── clinic_faq.md          # hours, location, booking, emergencies FAQ
-│       ├── pricing.md             # indicative prices, payment & insurance
-│       ├── patient_policy.md      # cancellation, refunds, privacy, complaints
-│       └── services.md            # services offered + specialist roster
+│       ├── clinic_faq.md          # English hours, location, booking, emergencies FAQ
+│       ├── pricing.md             # English indicative prices, payment & insurance
+│       ├── patient_policy.md      # English cancellation, refunds, privacy, complaints
+│       ├── services.md            # English services offered + specialist roster
+│       └── es/                    # matching Spanish versions of all four documents
 │
 ├── src/
 │   ├── main.py                    # back-compat shim -> doc_helper_ai_agent.main (app, run)
@@ -83,7 +84,7 @@ doc-helper-ai-agent/
 │       │   └── tools.py           # ActionResult (uniform tool-result contract)
 │       │
 │       ├── domain/                # internal models, enums, and repository protocols
-│       │   ├── enums.py           # Classification, Route, Specialty, ToolStatus, TicketType
+│       │   ├── enums.py           # Locale, Classification, Route, Specialty, ToolStatus, TicketType
 │       │   ├── models.py          # Doctor, TimeSlot, SafetyAssessment, RetrievedChunk, RagResult
 │       │   └── repositories.py    # CRMRepository protocol used by services and adapters
 │       │
@@ -116,6 +117,7 @@ doc-helper-ai-agent/
     ├── test_health.py             # /health
     ├── test_chat_api.py           # /api/chat + /api/documents end-to-end
     ├── test_safety_service.py     # risk detection
+    ├── test_appointment_tools.py  # English/Spanish specialty and weekday parsing
     ├── test_intake_service.py     # CRM ID formats & increments
     ├── test_dynamodb_crm.py       # provider selection, records, SDK boundary/errors
     ├── test_rag_service.py        # retrieval + citations
@@ -160,10 +162,10 @@ sequenceDiagram
     participant T as tools
     participant S as services / infra
 
-    C->>MW: POST /api/chat {message,...}
+    C->>MW: POST /api/chat {message,locale,...}
     MW->>MW: set trace_id (ContextVar) + X-Trace-Id header
     MW->>R: dispatch
-    R->>G: run_agent(message,user,session,trace)
+    R->>G: run_agent(message,user,session,trace,locale)
     G->>N: classify_request → safety_check → route_request
     N->>T: (route) answer_question / check_availability / create_* / escalate
     T->>S: get_container().<service>.<call>()
@@ -171,7 +173,7 @@ sequenceDiagram
     T-->>N: ActionResult
     N->>N: final_response composes message
     G-->>R: final AgentState
-    R-->>C: ChatResponse {message,classification,actions,requires_human,sources,trace_id}
+    R-->>C: ChatResponse {message,classification,actions,requires_human,sources,trace_id,locale}
 ```
 
 Graph shape (compiled once per process in `agent/graph.py`):
@@ -225,14 +227,16 @@ START → classify_request → safety_check → route_request ─┬─(escalate
 
 - **`tools.py`**: `ActionResult{tool:str, status:ToolStatus, result:dict}` — the
   uniform, serialisable record every tool returns.
-- **`chat.py`**: `ChatRequest{message,user_id,session_id}` (message min_length=1),
-  `ChatResponse{message,classification,actions,requires_human,sources,trace_id}`.
+- **`chat.py`**: `ChatRequest{message,user_id,session_id,locale}` (message min_length=1,
+  locale defaults to Spanish), `ChatResponse{message,classification,actions,
+  requires_human,sources,trace_id,locale}`.
 - **`documents.py`**: `DocumentInfo`, `DocumentsResponse`, `DocumentSearchRequest`,
   `DocumentSearchResponse`.
 
 ### `domain/` — internal types
 
 - **`enums.py`** (all `StrEnum`):
+  - `Locale`: `es, en`; Spanish is the request default.
   - `Classification`: `appointment_request, pricing_question, document_question,
     emergency_or_pain, complaint, general_question, human_escalation`.
   - `Route`: `rag, appointment, complaint, escalate`.
@@ -240,7 +244,7 @@ START → classify_request → safety_check → route_request ─┬─(escalate
   - `ToolStatus`: `success, error, skipped`.
   - `TicketType`: `appointment, callback, complaint, escalation`.
 - **`models.py`**: `Doctor`, `TimeSlot`, `SafetyAssessment{triggered,categories,
-  reason,recommended_action}`, `RetrievedChunk{id,text,source,score}`,
+  reason,recommended_action}`, `RetrievedChunk{id,text,source,locale,score}`,
   `RagResult{answer,sources,chunks}`.
 - **`repositories.py`**: `CRMRepository` protocol defining the four intake write
   operations. `IntakeService` depends on this boundary; both CRM adapters implement it.
@@ -264,8 +268,10 @@ START → classify_request → safety_check → route_request ─┬─(escalate
 - **`mock_schedule.py`**: `MockSchedule.check_availability(specialty, preferred_day,
   limit)` → deterministic `TimeSlot`s from `_DOCTORS` + `_SLOT_TEMPLATE`.
   `list_doctors(specialty)`. Singletons: `get_schedule()`, `reset_schedule()`.
-- **`vector_store.py`**: `LocalVectorStore.add(chunks)` / `.query(text, top_k)`.
-  Default keyword scoring (`_tokenize`, overlap / √len, stopword-filtered);
+- **`vector_store.py`**: `LocalVectorStore.add(chunks)` /
+  `.query(text, locale, top_k)` with locale-filtered retrieval.
+  Default keyword scoring uses accent normalization, bilingual aliases, query
+  coverage, density tie-breaking, and stopword filtering;
   optional embedding path (`_embed` via OpenAI + `_cosine`) gated by
   `settings.use_embeddings`, with automatic fallback to keywords on failure.
   Singletons: `get_vector_store(settings)`, `reset_vector_store()`.
@@ -274,16 +280,18 @@ START → classify_request → safety_check → route_request ─┬─(escalate
 
 - **`document_loader.py`**: `load_documents(docs_dir)` reads `*.md`/`*.txt`,
   splits by heading (`_split_into_sections`) then size (`_chunk_section`,
-  `_MAX_CHUNK_CHARS=900`), returns `[{"id","text","source"}]` (source = filename).
+  `_MAX_CHUNK_CHARS=900`) and carries the document heading into topic chunks;
+  returns `[{"id","text","source","locale"}]`
+  (source = filename; root files are English and `es/` files are Spanish).
 - **`rag_service.py`**: `RagService`
   - `ensure_indexed()` (thread-safe, once) loads + adds chunks to the store.
-  - `answer(question, top_k)` → `RagResult`; mock mode composes from the top chunk
+  - `answer(question, top_k, locale)` → `RagResult`; mock mode composes from the top chunk
     (`_compose_mock_answer`), LLM mode synthesises grounded answer
     (`_synthesize_with_llm`, falls back to mock on error).
   - `document_summary()` → `[(source, chunk_count)]`.
   - Singletons: `get_rag_service(settings, store)`, `reset_rag_service()`.
-- **`safety_service.py`**: `assess_message(message) -> SafetyAssessment`.
-  Whole-word regex over `_RISK_KEYWORDS` categories: `severe_pain, bleeding,
+- **`safety_service.py`**: `assess_message(message, locale) -> SafetyAssessment`.
+  Accent-normalized English/Spanish whole-word matching over `_RISK_KEYWORDS` categories: `severe_pain, bleeding,
   swelling, fever, trauma, diagnosis_request, medication_request, emergency`.
   On any match: `triggered=True` + a fixed `recommended_action` (no medical advice).
 - **`intake_service.py`**: `IntakeService` accepts the domain `CRMRepository` protocol:
@@ -293,7 +301,7 @@ START → classify_request → safety_check → route_request ─┬─(escalate
 ### `agent/` — LangGraph workflow
 
 - **`state.py`**: `AgentState(TypedDict, total=False)`. Inputs: `message, user_id,
-  session_id, trace_id`. Derived: `classification, safety, requires_human, route,
+  session_id, trace_id, locale`. Derived: `classification, safety, requires_human, route,
   availability`. Outputs: `actions` (**`Annotated[list, operator.add]`** reducer),
   `sources`, `response_message`.
 - **`prompts.py`**: `CLASSIFICATION_LABELS` (from the enum) and
@@ -318,7 +326,7 @@ START → classify_request → safety_check → route_request ─┬─(escalate
     (`_compose_appointment_message`, `_find_ticket_id`).
 - **`graph.py`**: `build_graph()` wires nodes/edges and the `_route_selector`
   conditional edge; `get_agent()` compiles once; `run_agent(message,user_id,
-  session_id,trace_id)` builds the initial state (`actions=[]`, `sources=[]`) and
+  session_id,trace_id,locale)` builds the initial state (`actions=[]`, `sources=[]`) and
   invokes the graph, returning the final state dict.
 
 ### `tools/` — ActionResult wrappers
@@ -329,7 +337,7 @@ START → classify_request → safety_check → route_request ─┬─(escalate
 - **`crm_tools.py`**: `create_appointment_request(user_id, availability, notes)`,
   `create_callback_request(...)`, `create_complaint_ticket(...)` → ActionResults
   carrying `ticket_id`/`status`.
-- **`knowledge_tools.py`**: `answer_question(question, top_k)` → ActionResult with
+- **`knowledge_tools.py`**: `answer_question(question, top_k, *, locale)` → ActionResult with
   `{answer, sources, num_chunks}`.
 - **`escalation_tools.py`**: `escalate_to_human(user_id, reason, categories,
   priority)` → ActionResult with escalation `ticket_id`.
