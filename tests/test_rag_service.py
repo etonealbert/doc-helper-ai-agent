@@ -58,9 +58,7 @@ def test_spanish_unknown_question_returns_spanish_fallback():
         ("¿Cuánto cuestan los implantes?", "pricing.md"),
     ],
 )
-def test_common_spanish_paraphrases_retrieve_the_expected_document(
-    question, expected_source
-):
+def test_common_spanish_paraphrases_retrieve_the_expected_document(question, expected_source):
     rag = get_container().rag
     result = rag.answer(question, locale=Locale.ES)
 
@@ -85,9 +83,7 @@ def test_spanish_question_can_request_an_english_answer():
 
 
 def test_knowledge_tool_keeps_top_k_as_the_second_positional_argument():
-    action = answer_question(
-        "How much does teeth whitening cost?", 1, locale=Locale.EN
-    )
+    action = answer_question("How much does teeth whitening cost?", 1, locale=Locale.EN)
 
     assert action.result["num_chunks"] == 1
 
