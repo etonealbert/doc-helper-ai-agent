@@ -23,7 +23,19 @@ def _split_into_sections(text: str) -> list[str]:
             current.append(line)
     if current:
         sections.append("\n".join(current).strip())
-    return [s for s in sections if s]
+    sections = [section for section in sections if section]
+    if not sections:
+        return []
+
+    document_heading = sections[0].splitlines()[0]
+    if not document_heading.startswith("# "):
+        return sections
+    return [
+        section
+        if index == 0 or section.startswith(document_heading)
+        else f"{document_heading}\n\n{section}"
+        for index, section in enumerate(sections)
+    ]
 
 
 def _chunk_section(section: str) -> list[str]:
@@ -50,7 +62,9 @@ def _chunk_section(section: str) -> list[str]:
 def load_documents(docs_dir: Path) -> list[dict[str, str]]:
     """Load ``*.md`` / ``*.txt`` files and return a flat list of chunks.
 
-    Each chunk is ``{"id", "text", "source"}`` where ``source`` is the filename.
+    Each chunk is ``{"id", "text", "source", "locale"}``. Files directly in
+    ``docs_dir`` are English; files under an ``en`` or ``es`` directory use that
+    locale. ``source`` remains the filename so citations are language-neutral.
     """
     if not docs_dir.exists():
         logger.warning("Sample docs directory does not exist: %s", docs_dir)
@@ -65,14 +79,17 @@ def load_documents(docs_dir: Path) -> list[dict[str, str]]:
         except OSError as exc:
             logger.warning("Could not read %s: %s", path, exc)
             continue
+        relative_parts = path.relative_to(docs_dir).parts
+        locale = relative_parts[0] if relative_parts[0] in {"en", "es"} else "en"
         source = path.name
         for section in _split_into_sections(text):
             for piece in _chunk_section(section):
                 chunks.append(
                     {
-                        "id": f"{source}::{len(chunks)}",
+                        "id": f"{locale}:{source}::{len(chunks)}",
                         "text": piece,
                         "source": source,
+                        "locale": locale,
                     }
                 )
     logger.info("Loaded %d chunk(s) from %s", len(chunks), docs_dir)

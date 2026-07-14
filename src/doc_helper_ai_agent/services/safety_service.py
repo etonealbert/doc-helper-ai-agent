@@ -9,8 +9,10 @@ medical advice, recommend contacting a professional, and escalate to a human.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from doc_helper_ai_agent.core.logging import get_logger
+from doc_helper_ai_agent.domain.enums import Locale
 from doc_helper_ai_agent.domain.models import SafetyAssessment
 
 logger = get_logger(__name__)
@@ -27,10 +29,40 @@ _RISK_KEYWORDS: dict[str, set[str]] = {
         "really bad pain",
         "so much pain",
         "pain",
+        "dolor intenso",
+        "dolor insoportable",
+        "dolor extremo",
+        "mucho dolor",
+        "dolor de muela",
+        "dolor",
+        "duele",
     },
-    "bleeding": {"bleeding", "blood", "hemorrhage", "won't stop bleeding"},
-    "swelling": {"swelling", "swollen", "abscess", "puffy face"},
-    "fever": {"fever", "high temperature", "chills"},
+    "bleeding": {
+        "bleeding",
+        "blood",
+        "hemorrhage",
+        "won't stop bleeding",
+        "sangrado",
+        "sangre",
+        "sangrar",
+        "sangra",
+        "sangran",
+        "sangrando",
+        "no deja de sangrar",
+        "hemorragia",
+    },
+    "swelling": {
+        "swelling",
+        "swollen",
+        "abscess",
+        "puffy face",
+        "hinchazon",
+        "hinchado",
+        "hinchada",
+        "absceso",
+        "cara inflamada",
+    },
+    "fever": {"fever", "high temperature", "chills", "fiebre", "temperatura alta", "escalofrios"},
     "trauma": {
         "knocked out",
         "broken tooth",
@@ -41,6 +73,13 @@ _RISK_KEYWORDS: dict[str, set[str]] = {
         "injury",
         "hit my",
         "car crash",
+        "diente roto",
+        "diente quebrado",
+        "diente agrietado",
+        "accidente",
+        "caida",
+        "lesion",
+        "golpe",
     },
     "diagnosis_request": {
         "diagnose",
@@ -51,6 +90,14 @@ _RISK_KEYWORDS: dict[str, set[str]] = {
         "what's wrong with",
         "is this serious",
         "what condition",
+        "diagnosticar",
+        "diagnostico",
+        "que tengo",
+        "esta infectado",
+        "tengo una infeccion",
+        "que me pasa",
+        "es grave",
+        "que enfermedad",
     },
     "medication_request": {
         "prescribe",
@@ -64,6 +111,17 @@ _RISK_KEYWORDS: dict[str, set[str]] = {
         "which medicine",
         "how much ibuprofen",
         "dosage",
+        "recetar",
+        "receta",
+        "antibiotico",
+        "antibioticos",
+        "analgesico",
+        "analgesicos",
+        "medicamento",
+        "medicamentos",
+        "que medicina",
+        "cuanto ibuprofeno",
+        "dosis",
     },
     "emergency": {
         "emergency",
@@ -75,22 +133,44 @@ _RISK_KEYWORDS: dict[str, set[str]] = {
         "life threatening",
         "passing out",
         "faint",
+        "emergencia",
+        "urgencia",
+        "urgente",
+        "no puedo respirar",
+        "ambulancia",
+        "riesgo vital",
+        "pierdo el conocimiento",
+        "desmayo",
     },
 }
 
-_RECOMMENDED_ACTION = (
-    "This may need professional attention. I can't provide medical advice or a "
-    "diagnosis, but I can arrange for a member of our clinical team to call you "
-    "back. If this is a medical emergency, please contact your local emergency "
-    "services right away."
-)
+_RECOMMENDED_ACTIONS = {
+    Locale.EN: (
+        "This may need professional attention. I can't provide medical advice or a "
+        "diagnosis. If this is a medical emergency, contact your local emergency "
+        "services or a qualified professional right away."
+    ),
+    Locale.ES: (
+        "Esto puede requerir atención profesional. No puedo ofrecer consejo médico ni "
+        "un diagnóstico. Si se trata de una emergencia médica, contacta de inmediato "
+        "con los servicios de emergencia locales o con un profesional cualificado."
+    ),
+}
+
+
+def _normalize(text: str) -> str:
+    return "".join(
+        character
+        for character in unicodedata.normalize("NFKD", text.casefold())
+        if not unicodedata.combining(character)
+    )
 
 
 def _build_patterns() -> dict[str, list[re.Pattern[str]]]:
     compiled: dict[str, list[re.Pattern[str]]] = {}
     for category, phrases in _RISK_KEYWORDS.items():
         compiled[category] = [
-            re.compile(rf"\b{re.escape(phrase)}\b", re.IGNORECASE) for phrase in phrases
+            re.compile(rf"(?<!\w){re.escape(_normalize(phrase))}(?!\w)") for phrase in phrases
         ]
     return compiled
 
@@ -98,23 +178,31 @@ def _build_patterns() -> dict[str, list[re.Pattern[str]]]:
 _PATTERNS = _build_patterns()
 
 
-def assess_message(message: str) -> SafetyAssessment:
+def assess_message(message: str, locale: Locale = Locale.ES) -> SafetyAssessment:
     """Evaluate ``message`` and return a :class:`SafetyAssessment`."""
+    normalized_message = _normalize(message)
     matched: list[str] = []
     for category, patterns in _PATTERNS.items():
-        if any(p.search(message) for p in patterns):
+        if any(p.search(normalized_message) for p in patterns):
             matched.append(category)
 
     if not matched:
         return SafetyAssessment(triggered=False)
 
     logger.info("Safety triggered: categories=%s", matched)
-    reason = (
-        "Message mentions potentially urgent clinical concerns: " + ", ".join(sorted(matched)) + "."
-    )
+    if locale == Locale.ES:
+        reason = (
+            "El mensaje menciona posibles riesgos clínicos: " + ", ".join(sorted(matched)) + "."
+        )
+    else:
+        reason = (
+            "Message mentions potentially urgent clinical concerns: "
+            + ", ".join(sorted(matched))
+            + "."
+        )
     return SafetyAssessment(
         triggered=True,
         categories=sorted(matched),
         reason=reason,
-        recommended_action=_RECOMMENDED_ACTION,
+        recommended_action=_RECOMMENDED_ACTIONS[locale],
     )

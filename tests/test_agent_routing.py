@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 from doc_helper_ai_agent.agent.graph import run_agent
+from doc_helper_ai_agent.domain.enums import Locale
 
 
-def _run(message: str) -> dict:
-    return run_agent(message=message, user_id="u", session_id="s", trace_id="trace-test")
+def _run(message: str, locale: Locale = Locale.EN) -> dict:
+    return run_agent(
+        message=message,
+        user_id="u",
+        session_id="s",
+        trace_id="trace-test",
+        locale=locale,
+    )
 
 
 def _tools(state: dict) -> list[str]:
@@ -55,6 +62,66 @@ def test_explicit_human_request_escalates():
     assert state["classification"] == "human_escalation"
     assert state["requires_human"] is True
     assert "escalate_to_human" in _tools(state)
+
+
+def test_spanish_pricing_routes_to_spanish_rag_answer():
+    state = _run("¿Cuánto cuesta el blanqueamiento dental?", Locale.ES)
+
+    assert state["classification"] == "pricing_question"
+    assert "answer_with_rag" in _tools(state)
+    assert state["sources"]
+    assert "Según nuestros documentos" in state["response_message"]
+
+
+def test_spanish_appointment_maps_day_and_specialty_to_canonical_values():
+    state = _run("Quiero reservar una cita de blanqueamiento el próximo viernes.", Locale.ES)
+
+    assert state["classification"] == "appointment_request"
+    assert state["availability"]["specialty"] == "whitening"
+    assert state["availability"]["preferred_day"] == "friday"
+    assert "create_appointment_request" in _tools(state)
+    assert "no está reservado ni confirmado" in state["response_message"]
+
+
+def test_spanish_emergency_routes_to_escalation_even_with_english_output():
+    state = _run("Tengo dolor intenso, sangrado e hinchazón.", Locale.EN)
+
+    assert state["classification"] == "emergency_or_pain"
+    assert state["requires_human"] is True
+    assert "escalate_to_human" in _tools(state)
+    assert "professional attention" in state["response_message"]
+
+
+def test_spanish_conjugated_pain_gets_professional_guidance():
+    state = _run("Me duele una muela", Locale.ES)
+
+    assert state["classification"] == "emergency_or_pain"
+    assert state["requires_human"] is True
+    assert "atención profesional" in state["response_message"]
+
+
+def test_pricing_language_wins_over_non_actionable_appointment_noun():
+    state = _run("¿Cuánto cuesta una cita de limpieza?", Locale.ES)
+
+    assert state["classification"] == "pricing_question"
+    assert "answer_with_rag" in _tools(state)
+    assert "create_appointment_request" not in _tools(state)
+
+
+def test_seguro_as_uncertainty_does_not_route_to_pricing():
+    state = _run("No estoy seguro de qué servicios ofrecen", Locale.ES)
+
+    assert state["classification"] == "document_question"
+
+
+def test_weekend_request_creates_callback_instead_of_mismatched_appointment():
+    state = _run("Quiero reservar una cita de limpieza el sábado", Locale.ES)
+
+    assert state["availability"]["preferred_day"] == "saturday"
+    assert state["availability"]["slot_count"] == 0
+    assert "create_callback_request" in _tools(state)
+    assert "create_appointment_request" not in _tools(state)
+    assert "solicitud de llamada" in state["response_message"]
 
 
 def test_mock_mode_runs_without_api_key(monkeypatch):

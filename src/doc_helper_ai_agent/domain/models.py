@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from doc_helper_ai_agent.domain.enums import Specialty
+from doc_helper_ai_agent.domain.enums import Locale, Specialty
 
 
 class Doctor(BaseModel):
@@ -41,6 +41,7 @@ class RetrievedChunk(BaseModel):
     id: str
     text: str
     source: str
+    locale: Locale
     score: float = 0.0
 
 

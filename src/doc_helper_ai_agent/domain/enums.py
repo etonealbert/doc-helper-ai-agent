@@ -5,6 +5,13 @@ from __future__ import annotations
 from enum import StrEnum
 
 
+class Locale(StrEnum):
+    """Supported user-facing languages."""
+
+    ES = "es"
+    EN = "en"
+
+
 class Classification(StrEnum):
     """High-level intent categories the agent can route on."""
 

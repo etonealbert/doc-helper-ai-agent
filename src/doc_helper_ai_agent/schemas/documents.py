@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from doc_helper_ai_agent.domain.enums import Locale
+
 
 class DocumentInfo(BaseModel):
     """Summary of a single indexed source document."""
@@ -25,6 +27,7 @@ class DocumentSearchRequest(BaseModel):
 
     query: str = Field(min_length=1)
     top_k: int | None = Field(default=None, ge=1, le=10)
+    locale: Locale = Locale.ES
 
 
 class DocumentSearchResponse(BaseModel):
@@ -33,3 +36,4 @@ class DocumentSearchResponse(BaseModel):
     answer: str
     sources: list[str] = Field(default_factory=list)
     trace_id: str
+    locale: Locale

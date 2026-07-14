@@ -19,7 +19,8 @@ an implant consultation and imaging.
 ## Emergency dental care
 Same-day emergency assessments for pain, swelling, bleeding, or dental trauma.
 Please contact the clinic directly for emergencies. This assistant cannot
-diagnose or treat medical conditions and will connect you with our clinical team.
+diagnose or treat medical conditions; it only records a human-review request when
+a completed action confirms one.
 
 ## Our specialists
 - Dr. Ana Ramirez — general dentistry and emergency care

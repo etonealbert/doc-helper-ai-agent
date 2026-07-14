@@ -31,6 +31,8 @@ and easy to extend toward a real cloud deployment.
   and **escalates to a human** instead of giving medical advice
 - 🗓️ **Mock scheduling + selectable CRM storage** (in-memory or DynamoDB)
 - 🧾 **Structured JSON responses** with an auditable list of actions taken
+- 🌐 **English and Spanish** classification, safety, scheduling, and RAG responses,
+  with Spanish as the API default
 - 🔎 **Per-request `trace_id`** propagated through logs and responses
 - ✅ **Tests** that pass offline with no API key
 - 🧱 **Clean architecture**: clear separation of API / agent / services /
@@ -170,7 +172,19 @@ curl http://localhost:8000/health
 { "status": "ok", "service": "doc-helper-ai-agent", "version": "0.1.0" }
 ```
 
-### Chat — appointment request
+### Chat — Spanish by default
+
+```bash
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{ "message": "¿Cuánto cuesta el blanqueamiento dental?" }'
+```
+
+Omitting `locale` selects Spanish. Set `"locale": "en"` for an English response;
+any other explicit locale is rejected with `422`. Intent codes, tool names,
+statuses, and specialty values remain stable English machine identifiers.
+
+### Chat — appointment request in English
 
 ```bash
 curl -X POST http://localhost:8000/api/chat \
@@ -178,13 +192,14 @@ curl -X POST http://localhost:8000/api/chat \
   -d '{
     "message": "I need to book an appointment for tooth whitening next Friday",
     "user_id": "demo-user",
-    "session_id": "demo-session"
+    "session_id": "demo-session",
+    "locale": "en"
   }'
 ```
 
 ```json
 {
-  "message": "I found availability for whitening with Dr. Chloe Nguyen on Friday at 09:30. I've created appointment request APPT-2026-0001; our team will confirm the details with you.",
+  "message": "A demonstration slot is available for whitening with Dr. Chloe Nguyen on Friday at 09:30. Appointment request APPT-2026-0001 was recorded; the slot is not reserved or confirmed until the team contacts you.",
   "classification": "appointment_request",
   "actions": [
     { "tool": "check_availability", "status": "success", "result": {} },
@@ -192,7 +207,8 @@ curl -X POST http://localhost:8000/api/chat \
   ],
   "requires_human": false,
   "sources": [],
-  "trace_id": "…"
+  "trace_id": "…",
+  "locale": "en"
 }
 ```
 
@@ -201,7 +217,7 @@ curl -X POST http://localhost:8000/api/chat \
 ```bash
 curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
-  -d '{ "message": "I have severe pain and my gum is bleeding" }'
+  -d '{ "message": "I have severe pain and my gum is bleeding", "locale": "en" }'
 ```
 
 `requires_human` will be `true` and an `escalate_to_human` action (`ESC-…`
@@ -212,7 +228,7 @@ ticket) is created.
 ```powershell
 Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/chat `
   -ContentType 'application/json' `
-  -Body '{ "message": "What are your opening hours?", "user_id": "demo-user" }'
+  -Body '{ "message": "What are your opening hours?", "user_id": "demo-user", "locale": "en" }'
 ```
 
 ### Documents
@@ -221,7 +237,7 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/chat `
 curl http://localhost:8000/api/documents
 curl -X POST http://localhost:8000/api/documents/search \
   -H "Content-Type: application/json" \
-  -d '{ "query": "cancellation policy" }'
+  -d '{ "query": "política de cancelación", "locale": "es" }'
 ```
 
 ## Agent workflow
@@ -270,6 +286,9 @@ enable LLM classification, embedding-based retrieval, and LLM answer synthesis.
 
 CRM provider selection is independent of LLM mode. Changing `CRM_PROVIDER` does not
 change the local document loader, vector store, retrieval, citations, or RAG flow.
+Both mock and LLM paths propagate the selected locale. The local corpus contains
+matching English and Spanish fictional documents, and retrieval is filtered by
+locale so responses do not mix languages.
 
 ## DynamoDB persistence and ECS roles
 
@@ -351,6 +370,7 @@ resource scopes are documented in the
 uv sync                                                   # install deps
 uv run uvicorn doc_helper_ai_agent.main:app --reload      # run the API
 uv run pytest                                             # run tests (offline)
+uv run ruff format --check .                              # check formatting
 uv run ruff check .                                       # lint
 ```
 
@@ -366,6 +386,7 @@ uv run ruff check .                                       # lint
 - [ ] **Real vector DB** (Chroma persistence / managed vector store)
 - [ ] **Auth** (API keys / OAuth) and rate limiting
 - [ ] **Observability** (OpenTelemetry traces, metrics, dashboards)
+- [x] **English/Spanish support** with Spanish-default API responses
 
 ## Disclaimer
 

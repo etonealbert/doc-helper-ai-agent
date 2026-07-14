@@ -32,6 +32,7 @@ def chat(request: ChatRequest) -> ChatResponse:
             user_id=request.user_id,
             session_id=request.session_id,
             trace_id=trace_id,
+            locale=request.locale,
         )
     except DocHelperError:
         raise
@@ -47,4 +48,5 @@ def chat(request: ChatRequest) -> ChatResponse:
         requires_human=state.get("requires_human", False),
         sources=state.get("sources", []),
         trace_id=trace_id,
+        locale=request.locale,
     )
