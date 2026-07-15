@@ -22,3 +22,13 @@ output "route53_zone_id" {
   description = "Existing hosted zone read by Terraform but updated by application CD."
   value       = data.aws_route53_zone.main.zone_id
 }
+
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution ID for the API."
+  value       = aws_cloudfront_distribution.api.id
+}
+
+output "cloudfront_domain_name" {
+  description = "CloudFront domain name serving the API."
+  value       = aws_cloudfront_distribution.api.domain_name
+}
