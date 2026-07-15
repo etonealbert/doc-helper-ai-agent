@@ -15,6 +15,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from doc_helper_ai_agent.api.routes import chat, documents, health
 from doc_helper_ai_agent.core.config import get_settings
@@ -57,6 +58,20 @@ def create_app() -> FastAPI:
             "operations. Demo project — not medical advice."
         ),
         lifespan=lifespan,
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:5173",
+            "http://localhost:4173",
+            "https://albertlukmanovlabs.lol",
+            "https://www.albertlukmanovlabs.lol",
+        ],
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type"],
+        expose_headers=["X-Trace-Id"],
     )
 
     @app.middleware("http")

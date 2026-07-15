@@ -92,3 +92,24 @@ resource "aws_iam_role_policy" "github_pass_roles" {
   role   = aws_iam_role.github_deploy.id
   policy = data.aws_iam_policy_document.github_pass_roles.json
 }
+
+data "aws_iam_policy_document" "ecs_execution_ssm" {
+  statement {
+    sid    = "ReadDocHelperOpenAiParameter"
+    effect = "Allow"
+
+    actions = [
+      "ssm:GetParameters",
+    ]
+
+    resources = [
+      data.aws_ssm_parameter.openai_api_key.arn,
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "ecs_execution_ssm" {
+  name   = "DocHelperReadOpenAiParameter"
+  role   = data.aws_iam_role.ecs_execution.id
+  policy = data.aws_iam_policy_document.ecs_execution_ssm.json
+}
