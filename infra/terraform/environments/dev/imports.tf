@@ -54,3 +54,13 @@ import {
   to = aws_iam_role_policy.github_pass_roles
   id = "GitHubActionsDeployRole:GitHubActionsPassEcsRoles"
 }
+
+import {
+  to = aws_cloudfront_distribution.api
+  id = "E1EBNESOJHEJB0"
+}
+
+import {
+  to = aws_cloudfront_origin_request_policy.api
+  id = "doc-helper-api-origin-request"
+}
